@@ -1,0 +1,35 @@
+# 운영은 검토한 DDL을 선적용하며 애플리케이션은 스키마를 자동 변경하지 않습니다.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 3000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+order:
+  service-auth:
+    allow-insecure-local: false
+  checkout:
+    terms-version: ${ORDER_CHECKOUT_TERMS_VERSION}
+  images:
+    local: false
+    endpoint: ""
+  clients:
+    discovery-enabled: true
+  auth:
+    issuer: ${JWT_ISSUER}
+    jwk-set-uri: ${ACCOUNT_JWKS_URI}
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE}
+  instance:
+    hostname: ${SERVICE_HOSTNAME}
+    instance-id: ${spring.application.name}:${SERVICE_INSTANCE_ID}
+    non-secure-port: ${SERVICE_PORT}
