@@ -28,4 +28,4 @@ paymentKey는 서버 비밀키가 아닌 거래 식별값이지만 승인 명령
 
 로컬 토픽은 scripts/Initialize-LocalOrderKafkaTopics.ps1로 생성합니다. Order는 ORDER_OUTBOX_PUBLISHER_ENABLED=true 및 ORDER_PAYMENT_EVENTS_ENABLED=true로 활성화합니다. 같은 Order 복제본은 같은 order-command-payment-v1 그룹을 사용합니다. Payment는 독립 명령 소비 그룹을 사용해야 합니다.
 
-운영 신규 테이블은 ops/sql/002-payment-messaging.sql입니다. 기존 HTTP 방식의 미완료 결제는 점검 후 CHECK로 전환해야 하며 승인 요청을 무작정 다시 보내지 않습니다. 롤링 중 구 HTTP 코드와 Kafka 코드를 혼용하지 않습니다. SQL/데이터 전환은 검토 후 별도로 적용하며 기존 DB를 삭제하지 않습니다.
+개발 스키마는 JPA 엔티티와 ddl-auto=update로 반영합니다. 운영은 필요한 스키마를 준비한 후 validate로 검증하며 스키마 변경 절차는 배포 준비 시 정합니다. 기존 HTTP 방식의 미완료 결제는 점검 후 CHECK로 전환해야 하며 승인 요청을 무작정 다시 보내지 않습니다. 롤링 중 구 HTTP 코드와 Kafka 코드를 혼용하지 않습니다. SQL/데이터 전환은 검토 후 별도로 적용하며 기존 DB를 삭제하지 않습니다.
