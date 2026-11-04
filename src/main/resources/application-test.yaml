@@ -1,0 +1,23 @@
+# 개발 .env와 외부 AWS/Eureka를 테스트에서 읽지 않습니다.
+spring:
+  config:
+    import: optional:classpath:/test-overrides.properties
+  jpa:
+    hibernate:
+      ddl-auto: none
+eureka:
+  client:
+    enabled: false
+order:
+  service-auth:
+    enabled: false
+  saga:
+    enabled: false
+  outbox:
+    publisher-enabled: false
+  clients:
+    discovery-enabled: false
+  auth:
+    issuer: https://account.test
+    audience: stockdrop-api
+    jwk-set-uri: http://localhost:1/.well-known/jwks.json

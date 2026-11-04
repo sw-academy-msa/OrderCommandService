@@ -1,0 +1,118 @@
+# 주문 원본과 공개키 검증만 소유하며 외부 서비스의 DB를 읽지 않습니다.
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+  application:
+    name: order-command-service
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: orders
+        jdbc:
+          time_zone: UTC
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    consumer:
+      group-id: ${ORDER_PAYMENT_CONSUMER_GROUP:order-command-payment-v1}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      properties:
+        allow.auto.create.topics: false
+        max.partition.fetch.bytes: 4194304
+    listener:
+      ack-mode: record
+      auto-startup: ${ORDER_PAYMENT_EVENTS_ENABLED:false}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 2000
+        delivery.timeout.ms: 8000
+        request.timeout.ms: 3000
+        max.request.size: 4194304
+    admin:
+      auto-create: false
+server:
+  port: ${SERVER_PORT:8083}
+  shutdown: graceful
+  forward-headers-strategy: none
+order:
+  payment-events:
+    enabled: ${ORDER_PAYMENT_EVENTS_ENABLED:false}
+  service-auth:
+    enabled: ${ORDER_SERVICE_AUTH_ENABLED:false}
+    client-id: ${ORDER_SERVICE_CLIENT_ID:order-command-service}
+    client-secret: ${ORDER_SERVICE_CLIENT_SECRET:}
+    subject: ${ORDER_SERVICE_SUBJECT:}
+    renew-before: 30s
+    allow-insecure-local: false
+  checkout:
+    terms-version: ${ORDER_CHECKOUT_TERMS_VERSION:checkout-v1}
+  images:
+    enabled: ${ORDER_IMAGES_ENABLED:false}
+    bucket: ${ORDER_IMAGES_BUCKET:}
+    region: ap-northeast-2
+    local: ${ORDER_IMAGES_LOCAL:false}
+    endpoint: ${ORDER_IMAGES_ENDPOINT:}
+    max-bytes: 10485760
+    allowed-types: image/jpeg,image/png,image/webp
+  saga:
+    enabled: ${ORDER_SAGA_ENABLED:true}
+  outbox:
+    publisher-enabled: ${ORDER_OUTBOX_PUBLISHER_ENABLED:false}
+  auth:
+    issuer: ${JWT_ISSUER:http://localhost:8080}
+    audience: ${JWT_AUDIENCE:stockdrop-api}
+    jwk-set-uri: ${ACCOUNT_JWKS_URI:http://localhost:8080/.well-known/jwks.json}
+  clients:
+    discovery-enabled: ${ORDER_CLIENT_DISCOVERY_ENABLED:true}
+    product:
+      enabled: ${ORDER_PRODUCT_ENABLED:false}
+      service-id: product-command-service
+      base-url: ${PRODUCT_INTERNAL_BASE_URL:http://localhost:8081}
+      token: ${ORDER_PRODUCT_SERVICE_TOKEN:}
+    account:
+      enabled: ${ORDER_ACCOUNT_ENABLED:true}
+      service-id: account-service
+      base-url: ${ACCOUNT_INTERNAL_BASE_URL:http://localhost:8080}
+      token: ""
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+    healthcheck:
+      enabled: true
+  instance:
+    hostname: ${SERVICE_HOSTNAME:localhost}
+    instance-id: ${spring.application.name}:${SERVICE_INSTANCE_ID:${server.port}}
+    non-secure-port: ${SERVICE_PORT:${server.port}}
+    health-check-url-path: /actuator/health
+    status-page-url-path: /actuator/health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# SQL 오류의 행 원문에 배송지나 결제 식별값이 포함되지 않게 합니다.
+logging:
+  level:
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: 'OFF'

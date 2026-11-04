@@ -1,0 +1,20 @@
+# 기존 Command PostgreSQL 인스턴스의 Order 전용 논리 DB·계정입니다.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5434/order_command}
+    username: ${DB_USERNAME:orders}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+order:
+  service-auth:
+    # 로컬 루프백 접속만 HTTP로 허용하며 운영은 TLS가 필요합니다.
+    allow-insecure-local: true
