@@ -5,12 +5,12 @@ import com.msa.order.domain.inquiry.command.dto.request.InquiryRequests;
 import com.msa.order.domain.inquiry.command.dto.response.InquiryResponse;
 import com.msa.order.domain.inquiry.command.service.OrderInquiryService;
 import com.msa.order.domain.inquiry.entity.OrderInquiry;
+import com.msa.order.domain.inquiry.exception.InquiryErrorCode;
+import com.msa.order.domain.inquiry.exception.InquiryException;
 import com.msa.order.domain.inquiry.repository.OrderInquiryRepository;
-import com.msa.order.domain.order.OrderError;
 import com.msa.order.domain.order.entity.PurchaseOrder;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.domain.outbox.entity.OutboxEvent;
-import com.msa.order.global.error.BusinessException;
 
 import jakarta.persistence.EntityManager;
 
@@ -54,7 +54,7 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
         var o = owned(buyer, order, false);
         if (o.state != PurchaseOrder.State.CONFIRMED
                 || new HashSet<>(r.imageIds()).size() != r.imageIds().size()) {
-            fail(OrderError.STATE);
+            fail(InquiryErrorCode.STATE);
         }
         UUID id =
                 UUID.nameUUIDFromBytes(
@@ -69,15 +69,27 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
         var old = inquiries.findById(id);
         if (old.isPresent()) {
             if (!old.get().requestHash.equals(hash)) {
-                fail(OrderError.DUPLICATE);
+                fail(InquiryErrorCode.DUPLICATE);
             }
             return response(old.get());
         }
         var i =
-                new OrderInquiry(
-                        id, order, buyer, o.sellerId, r.category().trim(), hash, clock.instant());
+                OrderInquiry.builder()
+                        .id(id)
+                        .order(order)
+                        .buyer(buyer)
+                        .seller(o.sellerId)
+                        .category(r.category().trim())
+                        .hash(hash)
+                        .now(clock.instant())
+                        .build();
         i.messages.add(
-                new OrderInquiry.Message(r.requestKey(), false, r.body().trim(), clock.instant()));
+                OrderInquiry.Message.builder()
+                        .key(r.requestKey())
+                        .seller(false)
+                        .body(r.body().trim())
+                        .now(clock.instant())
+                        .build());
         inquiries.saveAndFlush(i);
         r.imageIds().stream()
                 .sorted()
@@ -87,15 +99,15 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
                                     images.lock(imageId)
                                             .orElseThrow(
                                                     () ->
-                                                            new BusinessException(
-                                                                    OrderError.NOT_FOUND));
+                                                            new InquiryException(
+                                                                    InquiryErrorCode.NOT_FOUND));
                             if (!buyer.equals(image.buyerId)
                                     || !order.equals(image.orderId)
                                     || !image.verified
                                     || image.inquiryId != null
                                     || image.cleaned
                                     || image.discarded) {
-                                fail(OrderError.OWNER);
+                                fail(InquiryErrorCode.OWNER);
                             }
                             image.inquiryId = id;
                         });
@@ -110,12 +122,17 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
         var old = i.messages.stream().filter(m -> m.requestKey.equals(r.requestKey())).findFirst();
         if (old.isPresent()) {
             if (old.get().seller != seller || !old.get().body.equals(r.body().trim())) {
-                fail(OrderError.DUPLICATE);
+                fail(InquiryErrorCode.DUPLICATE);
             }
             return response(i);
         }
         i.messages.add(
-                new OrderInquiry.Message(r.requestKey(), seller, r.body().trim(), clock.instant()));
+                OrderInquiry.Message.builder()
+                        .key(r.requestKey())
+                        .seller(seller)
+                        .body(r.body().trim())
+                        .now(clock.instant())
+                        .build());
         inquiries.flush();
         emit(i);
         return response(i);
@@ -127,9 +144,11 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
     }
 
     private PurchaseOrder owned(UUID actor, UUID order, boolean seller) {
-        var o = orders.lock(order).orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+        var o =
+                orders.lock(order)
+                        .orElseThrow(() -> new InquiryException(InquiryErrorCode.NOT_FOUND));
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
-            fail(OrderError.OWNER);
+            fail(InquiryErrorCode.OWNER);
         }
         return o;
     }
@@ -138,9 +157,9 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
         var i =
                 inquiries
                         .findById(id)
-                        .orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+                        .orElseThrow(() -> new InquiryException(InquiryErrorCode.NOT_FOUND));
         if (!order.equals(i.orderId)) {
-            fail(OrderError.NOT_FOUND);
+            fail(InquiryErrorCode.NOT_FOUND);
         }
         return i;
     }
@@ -201,12 +220,13 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
                         "inquiry",
                         snapshot);
         em.persist(
-                new OutboxEvent(
-                        event,
-                        "stockdrop.orders.inquiries.private.v1",
-                        i.orderId,
-                        json.writeValueAsString(envelope),
-                        clock.instant()));
+                OutboxEvent.builder()
+                        .id(event)
+                        .topic("stockdrop.orders.inquiries.private.v1")
+                        .aggregateId(i.orderId)
+                        .payload(json.writeValueAsString(envelope))
+                        .now(clock.instant())
+                        .build());
     }
 
     private String hash(String value) {
@@ -220,7 +240,7 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
         }
     }
 
-    private void fail(OrderError code) {
-        throw new BusinessException(code);
+    private void fail(InquiryErrorCode code) {
+        throw new InquiryException(code);
     }
 }

@@ -31,7 +31,13 @@ public class OrderJournalImpl implements OrderJournal {
     public void changed(PurchaseOrder o, String action, UUID actor) {
         o.updatedAt = clock.instant();
         o.projectionVersion++;
-        em.persist(new OrderHistory(o.id, action, actor, clock.instant()));
+        em.persist(
+                OrderHistory.builder()
+                        .orderId(o.id)
+                        .action(action)
+                        .actor(actor)
+                        .now(clock.instant())
+                        .build());
         var snapshot = new LinkedHashMap<String, Object>();
         snapshot.put("orderId", o.id);
         snapshot.put("buyerId", o.buyerId);
@@ -72,11 +78,12 @@ public class OrderJournalImpl implements OrderJournal {
                         "order",
                         snapshot);
         em.persist(
-                new OutboxEvent(
-                        eventId,
-                        "stockdrop.orders.private.v1",
-                        o.id,
-                        json.writeValueAsString(event),
-                        clock.instant()));
+                OutboxEvent.builder()
+                        .id(eventId)
+                        .topic("stockdrop.orders.private.v1")
+                        .aggregateId(o.id)
+                        .payload(json.writeValueAsString(event))
+                        .now(clock.instant())
+                        .build());
     }
 }

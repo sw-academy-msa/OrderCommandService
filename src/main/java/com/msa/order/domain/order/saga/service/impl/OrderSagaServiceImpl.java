@@ -49,12 +49,25 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 store.complete(task, execute(task));
             } catch (RemoteFailure failure) {
                 if (task.state() == RESERVING && failure.definitive()) {
-                    store.complete(task, new SagaOutcome(FAILED, null, null, failure.code()));
+                    store.complete(
+                            task,
+                            SagaOutcome.builder()
+                                    .state(FAILED)
+                                    .stock(null)
+                                    .payment(null)
+                                    .failure(failure.code())
+                                    .build());
                 } else if (task.state() == STARTING_PAYMENT
                         && failure.definitive()
                         && "PRODUCT_EXPIRED".equals(failure.code())) {
                     store.complete(
-                            task, new SagaOutcome(RELEASING_STOCK, null, null, failure.code()));
+                            task,
+                            SagaOutcome.builder()
+                                    .state(RELEASING_STOCK)
+                                    .stock(null)
+                                    .payment(null)
+                                    .failure(failure.code())
+                                    .build());
                 } else {
                     store.retry(task, failure.code());
                 }
@@ -72,12 +85,22 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 var r = product.reserve(t.orderId(), t.productId(), t.buyerId(), t.items());
                 validate(t, r);
                 if (Set.of("EXPIRED", "RELEASED").contains(r.status())) {
-                    yield new SagaOutcome(EXPIRED, null, null, "PAYMENT_DEADLINE_EXCEEDED");
+                    yield SagaOutcome.builder()
+                            .state(EXPIRED)
+                            .stock(null)
+                            .payment(null)
+                            .failure("PAYMENT_DEADLINE_EXCEEDED")
+                            .build();
                 }
                 if (!"HELD".equals(r.status())) {
                     throw new RemoteFailure("RESERVATION_STATE_UNKNOWN", false);
                 }
-                yield new SagaOutcome(HELD, r, null, null);
+                yield SagaOutcome.builder()
+                        .state(HELD)
+                        .stock(r)
+                        .payment(null)
+                        .failure(null)
+                        .build();
             }
             case HELD -> expire(t);
             case STARTING_PAYMENT -> {
@@ -86,7 +109,12 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 if (!"PAYMENT_PROCESSING".equals(r.status())) {
                     throw new RemoteFailure("RESERVATION_STATE_UNKNOWN", false);
                 }
-                yield new SagaOutcome(APPROVING_PAYMENT, null, null, null);
+                yield SagaOutcome.builder()
+                        .state(APPROVING_PAYMENT)
+                        .stock(null)
+                        .payment(null)
+                        .failure(null)
+                        .build();
             }
             case APPROVING_PAYMENT ->
                     evaluate(
@@ -103,7 +131,12 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 if (!"CONFIRMED".equals(r.status())) {
                     throw new RemoteFailure("STOCK_CONFIRMATION_UNKNOWN", false);
                 }
-                yield new SagaOutcome(CONFIRMED, null, null, null);
+                yield SagaOutcome.builder()
+                        .state(CONFIRMED)
+                        .stock(null)
+                        .payment(null)
+                        .failure(null)
+                        .build();
             }
             case COMPENSATING_PAYMENT -> {
                 var r = payment.compensate(t.orderId(), t.paymentAttemptId());
@@ -111,7 +144,12 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 if (r.status() != PaymentReply.Status.CANCELED) {
                     throw new RemoteFailure("COMPENSATION_PENDING", false);
                 }
-                yield new SagaOutcome(RELEASING_STOCK, null, null, "LATE_PAYMENT_COMPENSATED");
+                yield SagaOutcome.builder()
+                        .state(RELEASING_STOCK)
+                        .stock(null)
+                        .payment(null)
+                        .failure("LATE_PAYMENT_COMPENSATED")
+                        .build();
             }
             case RELEASING_STOCK -> {
                 var r = product.release(t.reservationId(), t.paymentAttemptId(), true);
@@ -119,11 +157,12 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 if (!Set.of("RELEASED", "EXPIRED").contains(r.status())) {
                     throw new RemoteFailure("RELEASE_RESULT_UNKNOWN", false);
                 }
-                yield new SagaOutcome(
-                        clock.instant().isBefore(t.expiresAt()) ? FAILED : EXPIRED,
-                        null,
-                        null,
-                        "PAYMENT_NOT_COMPLETED");
+                yield SagaOutcome.builder()
+                        .state(clock.instant().isBefore(t.expiresAt()) ? FAILED : EXPIRED)
+                        .stock(null)
+                        .payment(null)
+                        .failure("PAYMENT_NOT_COMPLETED")
+                        .build();
             }
             default -> throw new IllegalStateException("종료 주문은 Saga 작업으로 실행할 수 없습니다.");
         };
@@ -139,7 +178,12 @@ public class OrderSagaServiceImpl implements OrderSagaService {
         if (!Set.of("RELEASED", "EXPIRED").contains(r.status())) {
             throw new RemoteFailure("EXPIRY_RESULT_UNKNOWN", false);
         }
-        return new SagaOutcome(EXPIRED, null, null, "PAYMENT_DEADLINE_EXCEEDED");
+        return SagaOutcome.builder()
+                .state(EXPIRED)
+                .stock(null)
+                .payment(null)
+                .failure("PAYMENT_DEADLINE_EXCEEDED")
+                .build();
     }
 
     private SagaOutcome evaluate(SagaTask t, PaymentReply r) {
@@ -148,17 +192,24 @@ public class OrderSagaServiceImpl implements OrderSagaService {
             if (r.approvedAt() == null) {
                 throw new RemoteFailure("INVALID_PAYMENT_RESPONSE", false);
             }
-            return new SagaOutcome(
-                    r.approvedAt().isBefore(t.expiresAt())
-                            ? CONFIRMING_STOCK
-                            : COMPENSATING_PAYMENT,
-                    null,
-                    r,
-                    null);
+            return SagaOutcome.builder()
+                    .state(
+                            r.approvedAt().isBefore(t.expiresAt())
+                                    ? CONFIRMING_STOCK
+                                    : COMPENSATING_PAYMENT)
+                    .stock(null)
+                    .payment(r)
+                    .failure(null)
+                    .build();
         }
         if (r.status() == PaymentReply.Status.DECLINED
                 || r.status() == PaymentReply.Status.CANCELED) {
-            return new SagaOutcome(RELEASING_STOCK, null, null, "PAYMENT_DECLINED");
+            return SagaOutcome.builder()
+                    .state(RELEASING_STOCK)
+                    .stock(null)
+                    .payment(null)
+                    .failure("PAYMENT_DECLINED")
+                    .build();
         }
         throw new RemoteFailure("PAYMENT_RESULT_PENDING", false);
     }

@@ -131,7 +131,12 @@ public class PaymentResultServiceImpl implements PaymentResultService {
                 o.nextAttemptAt = clock.instant();
             }
         }
-        em.persist(new PaymentResultReceipt(event.eventId(), hash, clock.instant()));
+        em.persist(
+                PaymentResultReceipt.builder()
+                        .id(event.eventId())
+                        .hash(hash)
+                        .now(clock.instant())
+                        .build());
     }
 
     private String hash(byte[] bytes) {

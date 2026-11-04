@@ -1,12 +1,14 @@
 package com.msa.order.domain.order.command.controller;
 
-import com.msa.order.domain.order.OrderError;
 import com.msa.order.domain.order.client.RemoteFailure;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
 import com.msa.order.domain.order.command.service.OrderCommandService;
+import com.msa.order.domain.order.exception.OrderErrorCode;
+import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.query.dto.response.CheckoutResponse;
 import com.msa.order.domain.order.query.service.OrderStatusQueryService;
-import com.msa.order.global.error.BusinessException;
+import com.msa.order.global.response.ApiResponse;
+import com.msa.order.global.response.SuccessCode;
 
 import jakarta.validation.Valid;
 
@@ -32,7 +34,8 @@ public class OrderCommandController {
     }
 
     @PostMapping
-    public ResponseEntity<CheckoutResponse> create(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ResponseEntity<ApiResponse<CheckoutResponse>> create(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderRequests.Create r) {
         return response(
                 () -> commands.create(UUID.fromString(jwt.getSubject()), r, jwt.getTokenValue()),
@@ -40,13 +43,13 @@ public class OrderCommandController {
     }
 
     @GetMapping("/{id}/checkout")
-    public ResponseEntity<CheckoutResponse> checkout(
+    public ResponseEntity<ApiResponse<CheckoutResponse>> checkout(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return response(() -> queries.buyer(UUID.fromString(jwt.getSubject()), id), false);
     }
 
     @PatchMapping("/{id}/shipping-address")
-    public ResponseEntity<CheckoutResponse> address(
+    public ResponseEntity<ApiResponse<CheckoutResponse>> address(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Address r) {
@@ -58,21 +61,22 @@ public class OrderCommandController {
     }
 
     @PostMapping("/{id}/payment-attempts")
-    public ResponseEntity<CheckoutResponse> payment(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ResponseEntity<ApiResponse<CheckoutResponse>> payment(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Payment r) {
         return response(() -> commands.payment(UUID.fromString(jwt.getSubject()), id, r), true);
     }
 
-    private ResponseEntity<CheckoutResponse> response(
+    private ResponseEntity<ApiResponse<CheckoutResponse>> response(
             java.util.function.Supplier<CheckoutResponse> task, boolean accepted) {
         try {
             return ResponseEntity.status(accepted ? 202 : 200)
                     .cacheControl(CacheControl.noStore())
-                    .body(task.get());
+                    .body(ApiResponse.onSuccess(task.get(), SuccessCode.OK));
         } catch (RemoteFailure failure) {
-            throw new BusinessException(OrderError.UNAVAILABLE);
+            throw new OrderException(OrderErrorCode.UNAVAILABLE);
         }
     }
 }

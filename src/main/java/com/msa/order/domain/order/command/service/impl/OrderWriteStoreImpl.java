@@ -2,14 +2,13 @@ package com.msa.order.domain.order.command.service.impl;
 
 import static com.msa.order.domain.order.entity.PurchaseOrder.State.*;
 
-import com.msa.order.domain.order.OrderError;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
+import com.msa.order.domain.order.exception.OrderErrorCode;
+import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.repository.OrderRepository;
-import com.msa.order.global.error.BusinessException;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,18 +22,15 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     private final com.msa.order.global.config.checkout.CheckoutProperties checkout;
     private final OrderRepository orders;
     private final OrderJournal journal;
-    private final JdbcTemplate jdbc;
     private final Clock clock;
 
     public OrderWriteStoreImpl(
             OrderRepository orders,
             OrderJournal journal,
-            JdbcTemplate jdbc,
             Clock clock,
             com.msa.order.global.config.checkout.CheckoutProperties checkout) {
         this.orders = orders;
         this.journal = journal;
-        this.jdbc = jdbc;
         this.clock = clock;
         this.checkout = checkout;
     }
@@ -45,24 +41,34 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
             return null;
         }
         if (!o.get().requestHash.equals(hash)) {
-            fail(OrderError.DUPLICATE);
+            fail(OrderErrorCode.DUPLICATE);
         }
         return o.get().id;
     }
 
     public UUID create(UUID buyer, OrderRequests.Create r, String hash, ShippingAddress address) {
-        jdbc.queryForObject(
-                "select pg_advisory_xact_lock(hashtextextended(?, 717))",
-                Object.class,
-                buyer + ":" + r.requestKey());
+        orders.lockRequestCreation(buyer + ":" + r.requestKey());
         UUID old = existing(buyer, r.requestKey(), hash);
         if (old != null) {
             return old;
         }
-        var o = new PurchaseOrder(buyer, r.requestKey(), hash, r.productId(), clock.instant());
+        var o =
+                PurchaseOrder.builder()
+                        .buyer(buyer)
+                        .key(r.requestKey())
+                        .hash(hash)
+                        .product(r.productId())
+                        .now(clock.instant())
+                        .build();
         r.items().stream()
                 .sorted(Comparator.comparing(OrderRequests.Item::optionId))
-                .forEach(i -> o.items.add(new OrderItem(i.optionId(), i.quantity())));
+                .forEach(
+                        i ->
+                                o.items.add(
+                                        OrderItem.builder()
+                                                .id(i.optionId())
+                                                .quantity(i.quantity())
+                                                .build()));
         o.address = address;
         orders.saveAndFlush(o);
         journal.changed(o, "ORDER_CREATED", buyer);
@@ -74,7 +80,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         if (o.state != HELD
                 || !clock.instant().isBefore(o.expiresAt)
                 || o.version != r.expectedVersion()) {
-            fail(OrderError.STATE);
+            fail(OrderErrorCode.STATE);
         }
         o.address = address;
         journal.changed(o, "ADDRESS_CHANGED", buyer);
@@ -86,19 +92,19 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
             if (!o.paymentAttemptId.equals(r.requestKey())
                     || !Objects.equals(o.termsVersion, r.termsVersion())
                     || !Objects.equals(o.paymentKeyHash, paymentHash(r.paymentKey()))) {
-                fail(OrderError.DUPLICATE);
+                fail(OrderErrorCode.DUPLICATE);
             }
             return;
         }
         if (!checkout.termsVersion().equals(r.termsVersion())) {
-            fail(OrderError.INVALID);
+            fail(OrderErrorCode.INVALID);
         }
         if (o.state != HELD
                 || o.expiresAt == null
                 || !clock.instant().isBefore(o.expiresAt)
                 || !r.agreed()
                 || o.totalAmount == null) {
-            fail(OrderError.STATE);
+            fail(OrderErrorCode.STATE);
         }
         o.paymentAttemptId = r.requestKey();
         o.paymentKey = r.paymentKey();
@@ -120,7 +126,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         if (o.state != CONFIRMED
                 || o.delivery != PurchaseOrder.Delivery.PREPARING
                 || o.version != r.expectedVersion()) {
-            fail(OrderError.STATE);
+            fail(OrderErrorCode.STATE);
         }
         o.carrier = r.carrier().trim();
         o.trackingNumber = r.trackingNumber();
@@ -137,7 +143,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         if (o.state != CONFIRMED
                 || o.delivery != PurchaseOrder.Delivery.SHIPPING
                 || o.version != r.expectedVersion()) {
-            fail(OrderError.STATE);
+            fail(OrderErrorCode.STATE);
         }
         o.delivery = PurchaseOrder.Delivery.DELIVERED;
         o.deliveredAt = clock.instant();
@@ -145,15 +151,15 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     }
 
     private PurchaseOrder owned(UUID id, UUID actor, boolean seller) {
-        var o = orders.lock(id).orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+        var o = orders.lock(id).orElseThrow(() -> new OrderException(OrderErrorCode.NOT_FOUND));
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
-            fail(OrderError.OWNER);
+            fail(OrderErrorCode.OWNER);
         }
         return o;
     }
 
-    private void fail(OrderError code) {
-        throw new BusinessException(code);
+    private void fail(OrderErrorCode code) {
+        throw new OrderException(code);
     }
 
     private String paymentHash(String value) {

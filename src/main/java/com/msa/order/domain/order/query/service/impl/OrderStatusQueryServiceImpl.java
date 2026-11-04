@@ -1,10 +1,10 @@
 package com.msa.order.domain.order.query.service.impl;
 
-import com.msa.order.domain.order.OrderError;
+import com.msa.order.domain.order.exception.OrderErrorCode;
+import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.query.dto.response.CheckoutResponse;
 import com.msa.order.domain.order.query.service.OrderStatusQueryService;
 import com.msa.order.domain.order.repository.OrderRepository;
-import com.msa.order.global.error.BusinessException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,9 +33,9 @@ public class OrderStatusQueryServiceImpl implements OrderStatusQueryService {
     }
 
     private CheckoutResponse get(UUID actor, UUID id, boolean seller) {
-        var o = orders.findById(id).orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+        var o = orders.findById(id).orElseThrow(() -> new OrderException(OrderErrorCode.NOT_FOUND));
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
-            throw new BusinessException(OrderError.OWNER);
+            throw new OrderException(OrderErrorCode.OWNER);
         }
         return CheckoutResponse.from(o, clock.instant());
     }

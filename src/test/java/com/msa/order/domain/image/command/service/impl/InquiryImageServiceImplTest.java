@@ -4,13 +4,14 @@ import static org.assertj.core.api.Assertions.*;
 
 import com.msa.order.domain.image.command.dto.request.ImageRequest;
 import com.msa.order.domain.image.command.service.InquiryImageService;
+import com.msa.order.domain.image.exception.ImageException;
 import com.msa.order.domain.image.repository.InquiryImageRepository;
 import com.msa.order.domain.inquiry.command.dto.request.InquiryRequests;
 import com.msa.order.domain.inquiry.command.service.OrderInquiryService;
+import com.msa.order.domain.inquiry.exception.InquiryException;
 import com.msa.order.domain.order.entity.*;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.global.config.database.OrderDatabaseTestSupport;
-import com.msa.order.global.error.BusinessException;
 
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,7 +122,7 @@ class InquiryImageServiceImplTest extends OrderDatabaseTestSupport {
         put(grant.url(), png, "image/png");
         images.complete(buyer, order, grant.id());
         assertThatThrownBy(() -> images.download(seller, order, grant.id(), true))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         var inquiry =
                 inquiries.create(
                         buyer,
@@ -140,14 +141,14 @@ class InquiryImageServiceImplTest extends OrderDatabaseTestSupport {
     @Test
     void mimeSpoofAndOversizeAreRejected() throws Exception {
         assertThatThrownBy(() -> images.issue(buyer, order, new ImageRequest("image/svg+xml", 100)))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         assertThatThrownBy(
                         () -> images.issue(buyer, order, new ImageRequest("image/png", 10485761)))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         var grant = images.issue(buyer, order, new ImageRequest("image/png", 20));
         put(grant.url(), new byte[20], "image/png");
         assertThatThrownBy(() -> images.complete(buyer, order, grant.id()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         assertThat(imageRepository.findById(grant.id()).orElseThrow().verified).isFalse();
     }
 
@@ -159,15 +160,15 @@ class InquiryImageServiceImplTest extends OrderDatabaseTestSupport {
         }
         assertThatThrownBy(
                         () -> images.issue(buyer, order, new ImageRequest("image/png", png.length)))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         images.discard(buyer, order, grants.getFirst());
         assertThat(images.issue(buyer, order, new ImageRequest("image/png", png.length)))
                 .isNotNull();
         assertThatThrownBy(() -> images.complete(buyer, order, grants.getFirst()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         clock.set(clock.instant().plusSeconds(301));
         assertThatThrownBy(() -> images.complete(buyer, order, grants.get(1)))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
     }
 
     @Test
@@ -176,7 +177,7 @@ class InquiryImageServiceImplTest extends OrderDatabaseTestSupport {
         put(grant.url(), png, "image/png");
         images.complete(buyer, order, grant.id());
         assertThatThrownBy(() -> images.complete(UUID.randomUUID(), order, grant.id()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(ImageException.class);
         UUID other =
                 tx.execute(
                         s -> {
@@ -203,7 +204,7 @@ class InquiryImageServiceImplTest extends OrderDatabaseTestSupport {
                                                 "하자",
                                                 "합성 문의",
                                                 List.of(grant.id()))))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(InquiryException.class);
         assertThat(jdbc.queryForObject("select count(*) from orders.order_inquiries", Long.class))
                 .isEqualTo(before);
         assertThat(imageRepository.findById(grant.id()).orElseThrow().inquiryId).isNull();

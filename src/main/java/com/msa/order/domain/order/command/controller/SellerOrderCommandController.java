@@ -4,6 +4,8 @@ import com.msa.order.domain.order.command.dto.request.OrderRequests;
 import com.msa.order.domain.order.command.service.OrderCommandService;
 import com.msa.order.domain.order.query.dto.response.CheckoutResponse;
 import com.msa.order.domain.order.query.service.OrderStatusQueryService;
+import com.msa.order.global.response.ApiResponse;
+import com.msa.order.global.response.SuccessCode;
 
 import jakarta.validation.Valid;
 
@@ -30,13 +32,13 @@ public class SellerOrderCommandController {
     }
 
     @GetMapping("/{id}/fulfillment")
-    public ResponseEntity<CheckoutResponse> edit(
+    public ResponseEntity<ApiResponse<CheckoutResponse>> edit(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return ok(queries.seller(UUID.fromString(jwt.getSubject()), id));
     }
 
     @PostMapping("/{id}/shipment")
-    public ResponseEntity<CheckoutResponse> ship(
+    public ResponseEntity<ApiResponse<CheckoutResponse>> ship(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Shipment r) {
@@ -44,14 +46,16 @@ public class SellerOrderCommandController {
     }
 
     @PostMapping("/{id}/delivery-completion")
-    public ResponseEntity<CheckoutResponse> deliver(
+    public ResponseEntity<ApiResponse<CheckoutResponse>> deliver(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Delivery r) {
         return ok(commands.deliver(UUID.fromString(jwt.getSubject()), id, r));
     }
 
-    private ResponseEntity<CheckoutResponse> ok(CheckoutResponse body) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    private ResponseEntity<ApiResponse<CheckoutResponse>> ok(CheckoutResponse body) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.onSuccess(body, SuccessCode.OK));
     }
 }

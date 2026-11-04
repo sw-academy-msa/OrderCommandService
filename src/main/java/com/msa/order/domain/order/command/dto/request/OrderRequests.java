@@ -21,7 +21,7 @@ public final class OrderRequests {
 
     public record Payment(
             @NotNull UUID requestKey,
-            @NotBlank @Size(max = 1000) String paymentKey,
+            @NotBlank @Size(max = 200) String paymentKey,
             @AssertTrue boolean agreed,
             @NotBlank @Size(max = 100) String termsVersion) {
         @Override

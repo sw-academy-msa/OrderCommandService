@@ -1,13 +1,13 @@
 package com.msa.order.domain.order.command.service.impl;
 
-import com.msa.order.domain.order.OrderError;
 import com.msa.order.domain.order.client.AddressClient;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
 import com.msa.order.domain.order.command.service.*;
+import com.msa.order.domain.order.exception.OrderErrorCode;
+import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.query.dto.response.CheckoutResponse;
 import com.msa.order.domain.order.query.service.OrderStatusQueryService;
 import com.msa.order.domain.order.saga.service.OrderSagaService;
-import com.msa.order.global.error.BusinessException;
 
 import org.springframework.stereotype.Service;
 
@@ -43,7 +43,7 @@ public class OrderCommandServiceImpl implements OrderCommandService {
                         != r.items().size()
                 || r.items().stream().mapToLong(OrderRequests.Item::quantity).sum()
                         > Integer.MAX_VALUE) {
-            throw new BusinessException(OrderError.INVALID);
+            throw new OrderException(OrderErrorCode.INVALID);
         }
         String hash = hash(r);
         UUID id = store.existing(buyer, r.requestKey(), hash);

@@ -9,18 +9,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.msa.order.domain.inquiry.command.dto.request.InquiryRequests;
 import com.msa.order.domain.inquiry.command.service.OrderInquiryService;
+import com.msa.order.domain.inquiry.exception.InquiryException;
 import com.msa.order.domain.order.client.HttpDependencyFixtures;
 import com.msa.order.domain.order.client.dto.response.PaymentReply;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
+import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.query.dto.response.CheckoutResponse;
 import com.msa.order.domain.order.query.service.OrderStatusQueryService;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.domain.order.saga.dto.response.SagaOutcome;
 import com.msa.order.domain.order.saga.service.*;
 import com.msa.order.global.config.database.OrderDatabaseTestSupport;
-import com.msa.order.global.error.BusinessException;
 
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,7 +134,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                                 "fixture-key",
                                                 true,
                                                 "unrecognized-version")))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         assertThat(HTTP.approveCalls.get()).isZero();
         assertThat(queries.buyer(buyer, o.orderId()).state()).isEqualTo(HELD);
     }
@@ -168,7 +169,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                         List.of(new OrderRequests.Item(option, 1)),
                         address);
         assertThatThrownBy(() -> commands.create(buyer, changed, "fixture-buyer-token"))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
     }
 
     @Test
@@ -235,7 +236,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                 new OrderRequests.Item(option, 2)),
                         address);
         assertThatThrownBy(() -> commands.create(buyer, r, "fixture-buyer-token"))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         assertThat(orders.count()).isZero();
         assertThat(HTTP.reserveCalls.get()).isZero();
     }
@@ -262,7 +263,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                                 "changed-key",
                                                 true,
                                                 r.termsVersion())))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
     }
 
     @Test
@@ -322,7 +323,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         var o = create();
         clock.set(o.expiresAt());
         assertThatThrownBy(() -> commands.payment(buyer, o.orderId(), payment()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         saga.recover();
         assertThat(queries.buyer(buyer, o.orderId()).state()).isEqualTo(EXPIRED);
         assertThat(HTTP.approveCalls.get()).isZero();
@@ -351,16 +352,16 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     void buyerAndSellerOwnershipIsEnforced() {
         var o = create();
         assertThatThrownBy(() -> queries.buyer(UUID.randomUUID(), o.orderId()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         assertThatThrownBy(() -> commands.payment(UUID.randomUUID(), o.orderId(), payment()))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         assertThatThrownBy(
                         () ->
                                 commands.shipment(
                                         UUID.randomUUID(),
                                         o.orderId(),
                                         new OrderRequests.Shipment("테스트 택배", "12345", o.version())))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
     }
 
     @Test
@@ -381,7 +382,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                         new OrderRequests.Address(
                                                 UUID.randomUUID(), refreshed.version()),
                                         "fixture-buyer-token"))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
     }
 
     @Test
@@ -408,7 +409,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                         HTTP.seller,
                                         o.orderId(),
                                         new OrderRequests.Shipment("택배", "123", o.version())))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
         var p = commands.payment(buyer, o.orderId(), payment());
         assertThatThrownBy(
                         () ->
@@ -416,7 +417,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                         HTTP.seller,
                                         p.orderId(),
                                         new OrderRequests.Delivery(p.version())))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(OrderException.class);
     }
 
     @Test
@@ -430,7 +431,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         var repeated = inquiries.message(HTTP.seller, o.orderId(), inquiry.id(), true, answer);
         assertThat(repeated.messages()).hasSize(2);
         assertThatThrownBy(() -> inquiries.get(UUID.randomUUID(), o.orderId(), inquiry.id(), false))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(InquiryException.class);
         assertThat(
                         jdbc.queryForObject(
                                 "select count(*) from orders.outbox_events where topic ="
@@ -513,7 +514,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
                                                         new SimpleGrantedAuthority("ROLE_BUYER"))))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("totalAmount").value(6000));
+                .andExpect(jsonPath("$.data.totalAmount").value(6000));
         String spec =
                 mvc.perform(get("/v3/api-docs"))
                         .andExpect(status().isOk())
@@ -523,6 +524,11 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         assertThat(spec)
                 .contains("/api/v1/orders", "/shipment", "/inquiries")
                 .doesNotContain("/returns", "/cancellations", "arrivalDate", "firstComeRank");
+        // 요청 주소 DTO와 응답 주소 DTO가 같은 Swagger 스키마로 합쳐지지 않게 검증합니다.
+        var schemas = json.readTree(spec).path("components").path("schemas");
+        assertThat(schemas.path("Address").path("properties").has("addressId")).isTrue();
+        assertThat(schemas.path("ShippingAddressResponse").path("properties").has("recipientName"))
+                .isTrue();
         var path = java.nio.file.Path.of("build/generated/order-command.openapi.json");
         java.nio.file.Files.createDirectories(path.getParent());
         java.nio.file.Files.writeString(path, spec);

@@ -3,6 +3,8 @@ package com.msa.order.domain.inquiry.command.controller;
 import com.msa.order.domain.inquiry.command.dto.request.InquiryRequests;
 import com.msa.order.domain.inquiry.command.dto.response.InquiryResponse;
 import com.msa.order.domain.inquiry.command.service.OrderInquiryService;
+import com.msa.order.global.response.ApiResponse;
+import com.msa.order.global.response.SuccessCode;
 
 import jakarta.validation.Valid;
 
@@ -25,7 +27,7 @@ public class OrderInquiryController {
 
     @PostMapping("/api/v1/orders/{order}/inquiries")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<InquiryResponse> create(
+    public ResponseEntity<ApiResponse<InquiryResponse>> create(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID order,
             @Valid @RequestBody InquiryRequests.Create r) {
@@ -34,14 +36,14 @@ public class OrderInquiryController {
 
     @GetMapping("/api/v1/orders/{order}/inquiries/{id}/editing")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<InquiryResponse> buyer(
+    public ResponseEntity<ApiResponse<InquiryResponse>> buyer(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         return ok(service.get(UUID.fromString(jwt.getSubject()), order, id, false));
     }
 
     @PostMapping("/api/v1/orders/{order}/inquiries/{id}/messages")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<InquiryResponse> followup(
+    public ResponseEntity<ApiResponse<InquiryResponse>> followup(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID order,
             @PathVariable UUID id,
@@ -51,14 +53,14 @@ public class OrderInquiryController {
 
     @GetMapping("/api/v1/seller/orders/{order}/inquiries/{id}/editing")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<InquiryResponse> seller(
+    public ResponseEntity<ApiResponse<InquiryResponse>> seller(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         return ok(service.get(UUID.fromString(jwt.getSubject()), order, id, true));
     }
 
     @PostMapping("/api/v1/seller/orders/{order}/inquiries/{id}/answers")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<InquiryResponse> answer(
+    public ResponseEntity<ApiResponse<InquiryResponse>> answer(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID order,
             @PathVariable UUID id,
@@ -66,7 +68,9 @@ public class OrderInquiryController {
         return ok(service.message(UUID.fromString(jwt.getSubject()), order, id, true, r));
     }
 
-    private ResponseEntity<InquiryResponse> ok(InquiryResponse body) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    private ResponseEntity<ApiResponse<InquiryResponse>> ok(InquiryResponse body) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.onSuccess(body, SuccessCode.OK));
     }
 }

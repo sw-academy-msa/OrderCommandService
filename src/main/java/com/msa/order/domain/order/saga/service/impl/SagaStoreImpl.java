@@ -8,11 +8,9 @@ import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.domain.order.saga.dto.response.*;
 import com.msa.order.domain.order.saga.service.SagaStore;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,28 +20,17 @@ import java.util.stream.Collectors;
 @Transactional(timeout = 5)
 public class SagaStoreImpl implements SagaStore {
     private final OrderRepository orders;
-    private final JdbcTemplate jdbc;
     private final OrderJournal journal;
     private final Clock clock;
 
-    public SagaStoreImpl(
-            OrderRepository orders, JdbcTemplate jdbc, OrderJournal journal, Clock clock) {
+    public SagaStoreImpl(OrderRepository orders, OrderJournal journal, Clock clock) {
         this.orders = orders;
-        this.jdbc = jdbc;
         this.journal = journal;
         this.clock = clock;
     }
 
     public UUID nextDue() {
-        var rows =
-                jdbc.queryForList(
-                        "select id from orders.purchase_orders where next_attempt_at <= ? and"
-                            + " (lease_until is null or lease_until <= ?) order by next_attempt_at,"
-                            + " id limit 1",
-                        UUID.class,
-                        Timestamp.from(clock.instant()),
-                        Timestamp.from(clock.instant()));
-        return rows.isEmpty() ? null : rows.getFirst();
+        return orders.findNextDueId(clock.instant()).orElse(null);
     }
 
     public SagaTask claim(UUID id) {
@@ -62,19 +49,20 @@ public class SagaStoreImpl implements SagaStore {
         o.leaseToken = UUID.randomUUID();
         o.leaseUntil = now.plusSeconds(30);
         o.attempts++;
-        return new SagaTask(
-                o.id,
-                o.leaseToken,
-                o.state,
-                o.productId,
-                o.buyerId,
-                o.items.stream().collect(Collectors.toMap(i -> i.optionId, i -> i.quantity)),
-                o.reservationId,
-                o.expiresAt,
-                o.paymentAttemptId,
-                o.totalAmount,
-                o.paymentKey,
-                o.paymentApprovedAt);
+        return SagaTask.builder()
+                .orderId(o.id)
+                .leaseToken(o.leaseToken)
+                .state(o.state)
+                .productId(o.productId)
+                .buyerId(o.buyerId)
+                .items(o.items.stream().collect(Collectors.toMap(i -> i.optionId, i -> i.quantity)))
+                .reservationId(o.reservationId)
+                .expiresAt(o.expiresAt)
+                .paymentAttemptId(o.paymentAttemptId)
+                .totalAmount(o.totalAmount)
+                .paymentKey(o.paymentKey)
+                .approvedAt(o.paymentApprovedAt)
+                .build();
     }
 
     public void complete(SagaTask task, SagaOutcome outcome) {

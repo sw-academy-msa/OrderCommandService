@@ -10,7 +10,6 @@ import com.msa.order.domain.payment.entity.PaymentAttempt;
 
 import jakarta.persistence.EntityManager;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +25,6 @@ public class PaymentClientImpl implements PaymentClient {
     private final EntityManager em;
     private final OrderRepository orders;
     private final OrderJournal journal;
-    private final JdbcTemplate jdbc;
     private final JsonMapper json;
     private final Clock clock;
 
@@ -34,13 +32,11 @@ public class PaymentClientImpl implements PaymentClient {
             EntityManager em,
             OrderRepository orders,
             OrderJournal journal,
-            JdbcTemplate jdbc,
             JsonMapper json,
             Clock clock) {
         this.em = em;
         this.orders = orders;
         this.journal = journal;
-        this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
     }
@@ -60,11 +56,7 @@ public class PaymentClientImpl implements PaymentClient {
     }
 
     public PaymentReply get(UUID attempt) {
-        var ids =
-                jdbc.queryForList(
-                        "select id from orders.purchase_orders where payment_attempt_id = ?",
-                        UUID.class,
-                        attempt);
+        var ids = orders.findIdsByPaymentAttemptId(attempt);
         if (ids.size() != 1) {
             fail();
         }
@@ -103,7 +95,12 @@ public class PaymentClientImpl implements PaymentClient {
     private PaymentAttempt attempt(PurchaseOrder o) {
         var a = em.find(PaymentAttempt.class, o.paymentAttemptId);
         if (a == null) {
-            a = new PaymentAttempt(o.paymentAttemptId, o.id, o.totalAmount);
+            a =
+                    PaymentAttempt.builder()
+                            .attempt(o.paymentAttemptId)
+                            .order(o.id)
+                            .amount(o.totalAmount)
+                            .build();
             em.persist(a);
         }
         if (!a.orderId.equals(o.id) || a.amount != o.totalAmount) {
@@ -131,17 +128,24 @@ public class PaymentClientImpl implements PaymentClient {
             event.put("paymentKey", paymentKey);
         }
         em.persist(
-                new OutboxEvent(
-                        id,
-                        "stockdrop.payment.commands.private.v1",
-                        a.id,
-                        json.writeValueAsString(event),
-                        clock.instant()));
+                OutboxEvent.builder()
+                        .id(id)
+                        .topic("stockdrop.payment.commands.private.v1")
+                        .aggregateId(a.id)
+                        .payload(json.writeValueAsString(event))
+                        .now(clock.instant())
+                        .build());
         a.nextCheckAt = clock.instant().plusSeconds(60);
     }
 
     private PaymentReply reply(PaymentAttempt a) {
-        return new PaymentReply(a.orderId, a.id, a.amount, a.status, a.approvedAt);
+        return PaymentReply.builder()
+                .orderId(a.orderId)
+                .paymentAttemptId(a.id)
+                .amount(a.amount)
+                .status(a.status)
+                .approvedAt(a.approvedAt)
+                .build();
     }
 
     private void fail() {

@@ -4,12 +4,12 @@ import com.msa.order.domain.image.command.dto.request.ImageRequest;
 import com.msa.order.domain.image.command.dto.response.ImageReply;
 import com.msa.order.domain.image.command.service.InquiryImageService;
 import com.msa.order.domain.image.entity.InquiryImage;
+import com.msa.order.domain.image.exception.ImageErrorCode;
+import com.msa.order.domain.image.exception.ImageException;
 import com.msa.order.domain.image.repository.InquiryImageRepository;
-import com.msa.order.domain.order.OrderError;
 import com.msa.order.domain.order.entity.PurchaseOrder;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.global.config.storage.ImageStorageProperties;
-import com.msa.order.global.error.BusinessException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,32 +49,33 @@ public class InquiryImageServiceImpl implements InquiryImageService {
     }
 
     public ImageReply issue(UUID buyer, UUID order, ImageRequest r) {
-        var o = orders.lock(order).orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+        var o = orders.lock(order).orElseThrow(() -> new ImageException(ImageErrorCode.NOT_FOUND));
         if (!buyer.equals(o.buyerId)) {
-            fail(OrderError.OWNER);
+            fail(ImageErrorCode.OWNER);
         }
         if (o.state != PurchaseOrder.State.CONFIRMED) {
-            fail(OrderError.STATE);
+            fail(ImageErrorCode.STATE);
         }
         ready();
         if (!properties.allowedTypes().contains(r.contentType())
                 || !Set.of("image/png", "image/jpeg", "image/webp").contains(r.contentType())
                 || r.sizeBytes() <= 0
                 || r.sizeBytes() > properties.maxBytes()) {
-            fail(OrderError.INVALID);
+            fail(ImageErrorCode.INVALID);
         }
         // 미사용 업로드 권한은 한 번에 최대 5장입니다. 연결 후에는 다음 문의의 사진을 추가 발급할 수 있습니다.
         if (images.countPending(order, clock.instant()) >= 5) {
-            fail(OrderError.STATE);
+            fail(ImageErrorCode.STATE);
         }
         var image =
                 images.save(
-                        new InquiryImage(
-                                order,
-                                buyer,
-                                r.contentType(),
-                                r.sizeBytes(),
-                                clock.instant().plusSeconds(300)));
+                        InquiryImage.builder()
+                                .order(order)
+                                .buyer(buyer)
+                                .type(r.contentType())
+                                .size(r.sizeBytes())
+                                .expires(clock.instant().plusSeconds(300))
+                                .build());
         var put =
                 PutObjectRequest.builder()
                         .bucket(properties.bucket())
@@ -91,20 +92,32 @@ public class InquiryImageServiceImpl implements InquiryImageService {
                                         .build())
                         .url()
                         .toExternalForm();
-        return new ImageReply(image.id, url, image.contentType, image.sizeBytes, image.expiresAt);
+        return ImageReply.builder()
+                .id(image.id)
+                .url(url)
+                .contentType(image.contentType)
+                .sizeBytes(image.sizeBytes)
+                .expiresAt(image.expiresAt)
+                .build();
     }
 
     public ImageReply complete(UUID buyer, UUID order, UUID id) {
         var image = owned(buyer, order, id, false);
         if (image.discarded) {
-            fail(OrderError.STATE);
+            fail(ImageErrorCode.STATE);
         }
         if (image.verified) {
-            return new ImageReply(id, null, image.contentType, image.sizeBytes, image.expiresAt);
+            return ImageReply.builder()
+                    .id(id)
+                    .url(null)
+                    .contentType(image.contentType)
+                    .sizeBytes(image.sizeBytes)
+                    .expiresAt(image.expiresAt)
+                    .build();
         }
         ready();
         if (!clock.instant().isBefore(image.expiresAt) || image.cleaned) {
-            fail(OrderError.STATE);
+            fail(ImageErrorCode.STATE);
         }
         try {
             var head =
@@ -115,7 +128,7 @@ public class InquiryImageServiceImpl implements InquiryImageService {
                                     .build());
             if (head.contentLength() != image.sizeBytes
                     || !image.contentType.equals(head.contentType())) {
-                fail(OrderError.INVALID);
+                fail(ImageErrorCode.INVALID);
             }
             byte[] bytes =
                     s3.getObjectAsBytes(
@@ -127,7 +140,7 @@ public class InquiryImageServiceImpl implements InquiryImageService {
                                             .build())
                             .asByteArray();
             if (!matches(image.contentType, bytes)) {
-                fail(OrderError.INVALID);
+                fail(ImageErrorCode.INVALID);
             }
             // 같은 이미지 완료 작업은 행 잠금으로 직렬화해 재업로드가 최종 첨부를 덮어쓰지 못하게 합니다.
             s3.copyObject(
@@ -139,12 +152,18 @@ public class InquiryImageServiceImpl implements InquiryImageService {
                             .copySourceIfMatch(head.eTag())
                             .build());
             image.verified = true;
-            return new ImageReply(id, null, image.contentType, image.sizeBytes, image.expiresAt);
+            return ImageReply.builder()
+                    .id(id)
+                    .url(null)
+                    .contentType(image.contentType)
+                    .sizeBytes(image.sizeBytes)
+                    .expiresAt(image.expiresAt)
+                    .build();
         } catch (S3Exception ex) {
-            throw new BusinessException(
+            throw new ImageException(
                     ex.statusCode() == 404 || ex.statusCode() == 412
-                            ? OrderError.INVALID
-                            : OrderError.UNAVAILABLE);
+                            ? ImageErrorCode.INVALID
+                            : ImageErrorCode.UNAVAILABLE);
         }
     }
 
@@ -152,7 +171,7 @@ public class InquiryImageServiceImpl implements InquiryImageService {
         var image = owned(actor, order, id, seller);
         ready();
         if (!image.verified || image.discarded || seller && image.inquiryId == null) {
-            fail(OrderError.NOT_FOUND);
+            fail(ImageErrorCode.NOT_FOUND);
         }
         var get =
                 GetObjectRequest.builder().bucket(properties.bucket()).key(image.objectKey).build();
@@ -165,8 +184,13 @@ public class InquiryImageServiceImpl implements InquiryImageService {
                                         .build())
                         .url()
                         .toExternalForm();
-        return new ImageReply(
-                id, url, image.contentType, image.sizeBytes, clock.instant().plusSeconds(300));
+        return ImageReply.builder()
+                .id(id)
+                .url(url)
+                .contentType(image.contentType)
+                .sizeBytes(image.sizeBytes)
+                .expiresAt(clock.instant().plusSeconds(300))
+                .build();
     }
 
     public void cleanup(UUID id) {
@@ -195,7 +219,7 @@ public class InquiryImageServiceImpl implements InquiryImageService {
     public void discard(UUID buyer, UUID order, UUID id) {
         var image = owned(buyer, order, id, false);
         if (image.inquiryId != null) {
-            fail(OrderError.STATE);
+            fail(ImageErrorCode.STATE);
         }
         // 발급 URL이 만료된 뒤 정리해야 삭제 직후 재업로드한 객체도 놓치지 않습니다.
         image.discarded = true;
@@ -204,25 +228,25 @@ public class InquiryImageServiceImpl implements InquiryImageService {
     private InquiryImage owned(UUID actor, UUID order, UUID id, boolean seller) {
         var o =
                 orders.findById(order)
-                        .orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+                        .orElseThrow(() -> new ImageException(ImageErrorCode.NOT_FOUND));
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
-            fail(OrderError.OWNER);
+            fail(ImageErrorCode.OWNER);
         }
-        var image = images.lock(id).orElseThrow(() -> new BusinessException(OrderError.NOT_FOUND));
+        var image = images.lock(id).orElseThrow(() -> new ImageException(ImageErrorCode.NOT_FOUND));
         if (!order.equals(image.orderId) || !o.buyerId.equals(image.buyerId)) {
-            fail(OrderError.OWNER);
+            fail(ImageErrorCode.OWNER);
         }
         return image;
     }
 
     private void ready() {
         if (!properties.ready()) {
-            fail(OrderError.UNAVAILABLE);
+            fail(ImageErrorCode.UNAVAILABLE);
         }
     }
 
-    private void fail(OrderError error) {
-        throw new BusinessException(error);
+    private void fail(ImageErrorCode error) {
+        throw new ImageException(error);
     }
 
     static boolean matches(String type, byte[] b) {

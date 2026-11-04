@@ -3,6 +3,8 @@ package com.msa.order.domain.image.command.controller;
 import com.msa.order.domain.image.command.dto.request.ImageRequest;
 import com.msa.order.domain.image.command.dto.response.ImageReply;
 import com.msa.order.domain.image.command.service.InquiryImageService;
+import com.msa.order.global.response.ApiResponse;
+import com.msa.order.global.response.SuccessCode;
 
 import jakarta.validation.Valid;
 
@@ -25,7 +27,7 @@ public class InquiryImageController {
 
     @PostMapping("/api/v1/orders/{order}/inquiry-images")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<ImageReply> issue(
+    public ResponseEntity<ApiResponse<ImageReply>> issue(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID order,
             @Valid @RequestBody ImageRequest r) {
@@ -34,34 +36,38 @@ public class InquiryImageController {
 
     @PostMapping("/api/v1/orders/{order}/inquiry-images/{id}/completion")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<ImageReply> complete(
+    public ResponseEntity<ApiResponse<ImageReply>> complete(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         return ok(images.complete(UUID.fromString(jwt.getSubject()), order, id));
     }
 
     @GetMapping("/api/v1/orders/{order}/inquiry-images/{id}/download")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<ImageReply> buyer(
+    public ResponseEntity<ApiResponse<ImageReply>> buyer(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         return ok(images.download(UUID.fromString(jwt.getSubject()), order, id, false));
     }
 
     @GetMapping("/api/v1/seller/orders/{order}/inquiry-images/{id}/download")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<ImageReply> seller(
+    public ResponseEntity<ApiResponse<ImageReply>> seller(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         return ok(images.download(UUID.fromString(jwt.getSubject()), order, id, true));
     }
 
     @DeleteMapping("/api/v1/orders/{order}/inquiry-images/{id}")
     @PreAuthorize("hasRole('BUYER')")
-    public ResponseEntity<Void> discard(
+    public ResponseEntity<ApiResponse<Void>> discard(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID order, @PathVariable UUID id) {
         images.discard(UUID.fromString(jwt.getSubject()), order, id);
-        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.onSuccess(null, SuccessCode.OK));
     }
 
-    private ResponseEntity<ImageReply> ok(ImageReply r) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(r);
+    private ResponseEntity<ApiResponse<ImageReply>> ok(ImageReply r) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.onSuccess(r, SuccessCode.OK));
     }
 }
