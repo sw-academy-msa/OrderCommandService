@@ -2,6 +2,8 @@ package com.msa.order.domain.outbox.entity;
 
 import jakarta.persistence.*;
 
+import lombok.Builder;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -15,6 +17,14 @@ import java.util.UUID;
                         name = "idx_outbox_pending",
                         columnList = "publishedAt,nextAttemptAt,createdAt"))
 public class OutboxEvent {
+    /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
+    public static class OutboxEventBuilder {
+        @Override
+        public String toString() {
+            return "OutboxEventBuilder[REDACTED]";
+        }
+    }
+
     @Id public UUID id;
 
     @Column(nullable = false)
@@ -37,6 +47,8 @@ public class OutboxEvent {
 
     protected OutboxEvent() {}
 
+    // 기존 생성자를 거쳐 UUID·초기 상태·시간과 컬렉션 초기화를 보존하며 JPA 기본 생성자도 유지합니다.
+    @Builder
     public OutboxEvent(UUID id, String topic, UUID aggregateId, String payload, Instant now) {
         this.id = id;
         this.topic = topic;

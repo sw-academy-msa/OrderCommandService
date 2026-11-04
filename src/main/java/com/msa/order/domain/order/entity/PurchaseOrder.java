@@ -2,6 +2,8 @@ package com.msa.order.domain.order.entity;
 
 import jakarta.persistence.*;
 
+import lombok.Builder;
+
 import java.time.Instant;
 import java.util.*;
 
@@ -13,6 +15,14 @@ import java.util.*;
         uniqueConstraints = @UniqueConstraint(columnNames = {"buyer_id", "request_key"}),
         indexes = @Index(name = "idx_order_saga_due", columnList = "nextAttemptAt,leaseUntil"))
 public class PurchaseOrder {
+    /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
+    public static class PurchaseOrderBuilder {
+        @Override
+        public String toString() {
+            return "PurchaseOrderBuilder[REDACTED]";
+        }
+    }
+
     public enum State {
         RESERVING,
         HELD,
@@ -124,6 +134,8 @@ public class PurchaseOrder {
 
     protected PurchaseOrder() {}
 
+    // 기존 생성자를 거쳐 UUID·초기 상태·시간과 컬렉션 초기화를 보존하며 JPA 기본 생성자도 유지합니다.
+    @Builder
     public PurchaseOrder(UUID buyer, UUID key, String hash, UUID product, Instant now) {
         id = UUID.randomUUID();
         buyerId = buyer;

@@ -2,6 +2,8 @@ package com.msa.order.domain.inquiry.entity;
 
 import jakarta.persistence.*;
 
+import lombok.Builder;
+
 import java.time.Instant;
 import java.util.*;
 
@@ -9,6 +11,14 @@ import java.util.*;
 @Entity
 @Table(name = "order_inquiries", schema = "orders")
 public class OrderInquiry {
+    /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
+    public static class OrderInquiryBuilder {
+        @Override
+        public String toString() {
+            return "OrderInquiryBuilder[REDACTED]";
+        }
+    }
+
     @Id public UUID id;
     @Version public long version;
 
@@ -39,6 +49,8 @@ public class OrderInquiry {
 
     protected OrderInquiry() {}
 
+    // 기존 생성자를 거쳐 UUID·초기 상태·시간과 컬렉션 초기화를 보존하며 JPA 기본 생성자도 유지합니다.
+    @Builder
     public OrderInquiry(
             UUID id,
             UUID order,
@@ -58,6 +70,14 @@ public class OrderInquiry {
 
     @Embeddable
     public static class Message {
+        /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
+        public static class MessageBuilder {
+            @Override
+            public String toString() {
+                return "MessageBuilder[REDACTED]";
+            }
+        }
+
         @Column(nullable = false)
         public UUID requestKey;
 
@@ -71,6 +91,8 @@ public class OrderInquiry {
 
         protected Message() {}
 
+        // 기존 생성자를 거쳐 UUID·초기 상태·시간과 컬렉션 초기화를 보존하며 JPA 기본 생성자도 유지합니다.
+        @Builder
         public Message(UUID key, boolean seller, String body, Instant now) {
             requestKey = key;
             this.seller = seller;

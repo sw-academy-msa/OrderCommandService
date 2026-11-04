@@ -2,10 +2,13 @@ package com.msa.order.domain.order.client.dto.response;
 
 import com.msa.order.domain.order.entity.ShippingAddress;
 
+import lombok.Builder;
+
 import java.time.Instant;
 import java.util.UUID;
 
 /** 실제 Account 본인 배송지 API 응답입니다. 원본 주소록 ID 소유권은 Account도 검증합니다. */
+@Builder
 public record AddressReply(
         UUID addressId,
         String label,
@@ -18,6 +21,14 @@ public record AddressReply(
         boolean defaultAddress,
         Instant createdAt,
         Instant updatedAt) {
+    /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
+    public static class AddressReplyBuilder {
+        @Override
+        public String toString() {
+            return "AddressReplyBuilder[REDACTED]";
+        }
+    }
+
     public ShippingAddress snapshot() {
         if (addressId == null
                 || recipientName == null
@@ -35,13 +46,14 @@ public record AddressReply(
             throw new com.msa.order.domain.order.client.RemoteFailure(
                     "INVALID_ADDRESS_RESPONSE", false);
         }
-        return new ShippingAddress(
-                recipientName,
-                recipientPhone,
-                postalCode,
-                roadAddress,
-                detailAddress,
-                deliveryMemo);
+        return ShippingAddress.builder()
+                .name(recipientName)
+                .phone(recipientPhone)
+                .postal(postalCode)
+                .road(roadAddress)
+                .detail(detailAddress)
+                .memo(deliveryMemo)
+                .build();
     }
 
     @Override
