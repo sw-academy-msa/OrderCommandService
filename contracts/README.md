@@ -30,7 +30,7 @@ Order는 orders 원본과 영속 Saga를 소유합니다. Product의 재고 로�
 
 ## Payment: Outbox + Kafka
 
-승인/재확인/보상 취소는 비공개 명령 토픽, 결과는 별도 결과 토픽을 사용합니다. 기존 Payment HTTP 어댑터는 제거했습니다. 실제 Payment 앱/토스 처리는 아직 없습니다. 상세 계약과 장애/전환 조건은 [payment-kafka-v1.md](payment-kafka-v1.md)를 따릅니다.
+승인/재확인/보상 취소는 비공개 명령 토픽, 결과는 별도 결과 토픽을 사용합니다. 기존 Payment HTTP 어댑터는 제거했습니다. PaymentService에 테스트 승인·조회·전액 보상과 결과 Outbox가 구현되었습니다. 실제 브라우저 결제 연동은 별도 검증입니다. 상세 계약과 장애/전환 조건은 [payment-kafka-v1.md](payment-kafka-v1.md)를 따릅니다.
 
 ## 영속 Saga와 이벤트
 

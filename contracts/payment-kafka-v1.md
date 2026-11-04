@@ -1,6 +1,6 @@
 # Order ↔ Payment Kafka 계약 v1
 
-Order → Payment HTTP 승인/조회/보상 어댑터는 제거했습니다. 재고 확보/진행 표시/확정/해제는 Product 내부 HTTP를 유지합니다. 실제 Payment 앱·토스 구현은 아직 없습니다. 아래 계약을 Payment가 구현해야 구매 흐름이 완성됩니다.
+Order → Payment HTTP 승인/조회/보상 어댑터는 제거했습니다. 재고 확보/진행 표시/확정/해제는 Product 내부 HTTP를 유지합니다. PaymentService가 이 계약의 테스트 승인·paymentKey 조회·전액 보상·결과 Outbox를 구현합니다. 실제 브라우저 인증과 구매 전체 흐름 검증은 별도입니다.
 
 ## 요청: stockdrop.payment.commands.private.v1
 
