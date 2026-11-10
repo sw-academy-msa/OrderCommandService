@@ -79,9 +79,7 @@ public class HttpDependencyFixtures implements AutoCloseable {
                     return;
                 }
                 UUID id = UUID.fromString(path.substring(path.lastIndexOf('/') + 1));
-                respond(
-                        e,
-                        200,
+                var address =
                         new AddressReply(
                                 id,
                                 "합성 배송지",
@@ -93,7 +91,20 @@ public class HttpDependencyFixtures implements AutoCloseable {
                                 "테스트 메모",
                                 false,
                                 clock.instant(),
-                                clock.instant()));
+                                clock.instant());
+                // 실제 Account처럼 공통 응답 봉투로 감싸야 봉투 해석 회귀를 테스트가 잡습니다.
+                respond(
+                        e,
+                        200,
+                        Map.of(
+                                "success",
+                                true,
+                                "code",
+                                "COMMON_SUCCESS",
+                                "message",
+                                "요청이 성공했습니다.",
+                                "data",
+                                address));
                 return;
             }
             if (path.startsWith("/internal/v1/stock-reservations")) {
