@@ -5,6 +5,9 @@ spring:
     username: ${DB_USERNAME:orders}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  flyway:
+    # 기존 로컬 orders 스키마에 약관 전용 이력을 추가합니다. 기존 주문을 변경하지 않습니다.
+    baseline-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: update

@@ -19,20 +19,23 @@ import java.util.*;
 @Service
 @Transactional(timeout = 5)
 public class OrderWriteStoreImpl implements OrderWriteStore {
-    private final com.msa.order.global.config.checkout.CheckoutProperties checkout;
+    private final com.msa.order.domain.terms.query.service.CheckoutTermsService terms;
     private final OrderRepository orders;
     private final OrderJournal journal;
     private final Clock clock;
+    private final com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal;
 
     public OrderWriteStoreImpl(
+            com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal,
             OrderRepository orders,
             OrderJournal journal,
             Clock clock,
-            com.msa.order.global.config.checkout.CheckoutProperties checkout) {
+            com.msa.order.domain.terms.query.service.CheckoutTermsService terms) {
+        this.withdrawal = withdrawal;
         this.orders = orders;
         this.journal = journal;
         this.clock = clock;
-        this.checkout = checkout;
+        this.terms = terms;
     }
 
     public UUID existing(UUID buyer, UUID key, String hash) {
@@ -47,6 +50,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     }
 
     public UUID create(UUID buyer, OrderRequests.Create r, String hash, ShippingAddress address) {
+        withdrawal.requireOpen(buyer);
         orders.lockRequestCreation(buyer + ":" + r.requestKey());
         UUID old = existing(buyer, r.requestKey(), hash);
         if (old != null) {
@@ -96,7 +100,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
             }
             return;
         }
-        if (!checkout.termsVersion().equals(r.termsVersion())) {
+        if (!terms.current().version().equals(r.termsVersion())) {
             fail(OrderErrorCode.INVALID);
         }
         if (o.state != HELD
