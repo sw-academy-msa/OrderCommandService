@@ -135,16 +135,19 @@ class ServiceTokenProviderImplTest {
                 });
         server.start();
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
-        var endpoint = new ClientsProperties.Endpoint(true, "account-service", base, "");
+        var endpoint = new ClientsProperties.Endpoint(true, "account-service", "");
         clients =
                 new ClientsProperties(
-                        false,
+                        "http",
                         new ClientsProperties.Endpoint(
-                                true, "product-command-service", base, "legacy-fixture"),
+                                true, "product-command-service", "legacy-fixture"),
                         endpoint,
                         endpoint);
-        transport =
-                new HttpTransport(new HttpClientConfig().internalRestClient(), null, clients, json);
+        // 고정 주소 대신 Eureka와 같은 서비스 ID 선택 경로로 fixture에 접속합니다.
+        var balancer =
+                new FixedLoadBalancer(
+                        Map.of("account-service", base, "product-command-service", base));
+        transport = new HttpTransport(balancer.restClientBuilder().build(), clients, json);
         var decoder =
                 new JwtConfig()
                         .jwtDecoder(
@@ -235,15 +238,15 @@ class ServiceTokenProviderImplTest {
     }
 
     @Test
-    void rejectsNonLoopbackPlaintextBeforeSendingCredentials() {
-        var unsafe =
-                new ClientsProperties.Endpoint(true, "account-service", "http://192.0.2.1:1", "");
+    void rejectsPlaintextCredentialsOutsideLocalProfile() {
+        var account = new ClientsProperties.Endpoint(true, "account-service", "");
         var form = new org.springframework.util.LinkedMultiValueMap<String, String>();
         form.add("grant_type", "client_credentials");
+        // 인스턴스 주소는 전송 직전에 정해지므로 http scheme이면 로컬 허용 없이는 보내기 전에 차단합니다.
         assertThatThrownBy(
                         () ->
                                 transport.exchangeServiceCredentials(
-                                        unsafe, form, "order-command-service", "synthetic", true))
+                                        account, form, "order-command-service", "synthetic", false))
                 .isInstanceOf(RemoteFailure.class)
                 .hasMessage("SERVICE_AUTH_TLS_REQUIRED");
         assertThat(requests.get()).isZero();

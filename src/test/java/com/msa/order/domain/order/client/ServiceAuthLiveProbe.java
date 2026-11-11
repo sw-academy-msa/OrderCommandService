@@ -4,6 +4,8 @@ import com.msa.order.domain.order.client.impl.*;
 import com.msa.order.global.config.client.*;
 import com.msa.order.global.config.security.*;
 
+import org.springframework.web.client.RestClient;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.*;
@@ -23,14 +25,21 @@ public class ServiceAuthLiveProbe {
             String issuer = input.readLine();
             String accountUrl = input.readLine();
             String productUrl = input.readLine();
-            var account = new ClientsProperties.Endpoint(true, "account-service", accountUrl, "");
-            var product =
-                    new ClientsProperties.Endpoint(true, "product-command-service", productUrl, "");
-            var clients = new ClientsProperties(false, product, account, account);
-            var rest = new HttpClientConfig().internalRestClient();
+            var account = new ClientsProperties.Endpoint(true, "account-service", "");
+            var product = new ClientsProperties.Endpoint(true, "product-command-service", "");
+            var clients = new ClientsProperties("http", product, account, account);
+            var rest = RestClient.builder().requestFactory(HttpClientConfig.requestFactory()).build();
+            // 운영과 같은 서비스 ID 선택 경로를 쓰되, 입력받은 로컬 주소를 등록 정보 대신 사용합니다.
+            var balancer =
+                    new FixedLoadBalancer(
+                            Map.of(
+                                    "account-service", accountUrl,
+                                    "product-command-service", productUrl));
             var http =
                     new HttpTransport(
-                            rest, null, clients, JsonMapper.builder().findAndAddModules().build());
+                            balancer.restClientBuilder().build(),
+                            clients,
+                            JsonMapper.builder().findAndAddModules().build());
             var clock = Clock.systemUTC();
             var decoder =
                     new JwtConfig()

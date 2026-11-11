@@ -19,5 +19,7 @@ springdoc:
     path: /swagger-ui.html
 order:
   service-auth:
-    # 로컬 루프백 접속만 HTTP로 허용하며 운영은 TLS가 필요합니다.
+    # 로컬 프로필에서만 HTTP 자격증명 전송을 허용하며 운영은 TLS가 필요합니다.
     allow-insecure-local: true
+  clients:
+    scheme: http
