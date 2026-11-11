@@ -15,13 +15,13 @@ spring:
 order:
   service-auth:
     allow-insecure-local: false
+  clients:
+    scheme: https
   checkout:
     terms-version: ${ORDER_CHECKOUT_TERMS_VERSION}
   images:
     local: false
     endpoint: ""
-  clients:
-    discovery-enabled: true
   auth:
     issuer: ${JWT_ISSUER}
     jwk-set-uri: ${ACCOUNT_JWKS_URI}

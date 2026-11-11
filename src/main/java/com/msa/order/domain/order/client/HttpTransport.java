@@ -3,7 +3,7 @@ package com.msa.order.domain.order.client;
 import com.msa.order.domain.order.client.dto.response.ServiceTokenReply;
 import com.msa.order.global.config.client.ClientsProperties;
 
-import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -14,22 +14,22 @@ import tools.jackson.databind.json.JsonMapper;
 import java.net.URI;
 import java.util.Map;
 
-/** Eureka 인스턴스를 LoadBalancer로 선택합니다. 내부 호출은 외부 Gateway를 왕복하지 않습니다. */
+/**
+ * 서비스 ID 주소(scheme://service-id/path)로 호출하고 인스턴스 선택은 Spring Cloud LoadBalancer에 맡깁니다. 상태 확인으로 죽은
+ * 인스턴스를 빼고, 연결 실패는 다른 인스턴스로 재시도합니다. 내부 호출은 외부 Gateway를 왕복하지 않습니다.
+ */
 @Component
 public class HttpTransport {
     private final RestClient rest;
-    private final LoadBalancerClient balancer;
-    private final ClientsProperties properties;
+    private final String scheme;
     private final JsonMapper json;
 
     public HttpTransport(
-            RestClient rest,
-            LoadBalancerClient balancer,
+            @Qualifier("loadBalancedRestClient") RestClient rest,
             ClientsProperties properties,
             JsonMapper json) {
         this.rest = rest;
-        this.balancer = balancer;
-        this.properties = properties;
+        this.scheme = properties.scheme();
         this.json = json;
     }
 
@@ -90,32 +90,17 @@ public class HttpTransport {
         if (!endpoint.enabled()) {
             throw new RemoteFailure("CLIENT_NOT_CONFIGURED", false);
         }
+        if (endpoint.serviceId() == null || !endpoint.serviceId().matches("[a-z][a-z0-9-]{1,99}")) {
+            throw new RemoteFailure("CLIENT_NOT_CONFIGURED", false);
+        }
+        // 인스턴스는 전송 직전에 정해지므로 자격증명 TLS 요구는 scheme으로 보장합니다. https면 평문 인스턴스와는 연결 자체가 실패합니다.
+        if (credentials && !"https".equals(scheme) && !allowInsecureLocal) {
+            throw new RemoteFailure("SERVICE_AUTH_TLS_REQUIRED", false);
+        }
         try {
-            URI base;
-            if (properties.discoveryEnabled()) {
-                var instance = balancer.choose(endpoint.serviceId());
-                if (instance == null) {
-                    throw new RemoteFailure("SERVICE_UNAVAILABLE", false);
-                }
-                base = instance.getUri();
-            } else {
-                base = URI.create(endpoint.baseUrl());
-            }
-            if (!java.util.Set.of("http", "https").contains(base.getScheme())
-                    || base.getHost() == null
-                    || base.getUserInfo() != null) {
-                throw new RemoteFailure("CLIENT_NOT_CONFIGURED", false);
-            }
-            if (credentials
-                    && !"https".equals(base.getScheme())
-                    && !(allowInsecureLocal
-                            && java.util.Set.of("localhost", "127.0.0.1", "[::1]", "::1")
-                                    .contains(base.getHost()))) {
-                throw new RemoteFailure("SERVICE_AUTH_TLS_REQUIRED", false);
-            }
             var request =
                     rest.method(method)
-                            .uri(base.resolve(path))
+                            .uri(URI.create(scheme + "://" + endpoint.serviceId() + path))
                             .headers(
                                     h -> {
                                         authenticate.accept(h);
@@ -169,6 +154,9 @@ public class HttpTransport {
             return result;
         } catch (RemoteFailure failure) {
             throw failure;
+        } catch (IllegalStateException failure) {
+            // LoadBalancer가 고를 인스턴스가 없으면 요청을 보내지 않은 상태입니다. 고정 주소로 우회하지 않습니다.
+            throw new RemoteFailure("SERVICE_UNAVAILABLE", false);
         } catch (RuntimeException failure) {
             throw new RemoteFailure("HTTP_RESULT_UNKNOWN", false);
         }

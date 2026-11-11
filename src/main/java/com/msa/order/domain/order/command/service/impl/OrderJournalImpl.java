@@ -18,11 +18,17 @@ import java.util.*;
 @Service
 @Transactional(propagation = Propagation.MANDATORY)
 public class OrderJournalImpl implements OrderJournal {
+    private final com.msa.order.domain.notification.service.BusinessNoticeService notices;
     private final EntityManager em;
     private final JsonMapper json;
     private final Clock clock;
 
-    public OrderJournalImpl(EntityManager em, JsonMapper json, Clock clock) {
+    public OrderJournalImpl(
+            com.msa.order.domain.notification.service.BusinessNoticeService notices,
+            EntityManager em,
+            JsonMapper json,
+            Clock clock) {
+        this.notices = notices;
         this.em = em;
         this.json = json;
         this.clock = clock;
@@ -85,5 +91,48 @@ public class OrderJournalImpl implements OrderJournal {
                         .payload(json.writeValueAsString(event))
                         .now(clock.instant())
                         .build());
+        // 알림은 원본 상태 전이가 확정되는 지점에서만 기록합니다. Saga 중간 단계와 재시도는 제외합니다.
+        if ("SAGA_CONFIRMED".equals(action)) {
+            notices.enqueue(
+                    o.buyerId,
+                    "ORDER_CONFIRMED",
+                    o.id,
+                    o.projectionVersion,
+                    "ORDER",
+                    o.id,
+                    null,
+                    null);
+            // 과거 확보에 판매자 스냅샷이 없으면 추정하지 않습니다. 본인 구매는 같은 계정에 한 번만 기록합니다.
+            if (o.sellerId != null && !o.sellerId.equals(o.buyerId))
+                notices.enqueue(
+                        o.sellerId,
+                        "ORDER_CONFIRMED",
+                        o.id,
+                        o.projectionVersion,
+                        "SELLER_ORDER",
+                        o.id,
+                        null,
+                        null);
+        } else if ("SHIPMENT_REGISTERED".equals(action)) {
+            notices.enqueue(
+                    o.buyerId,
+                    "ORDER_SHIPPED",
+                    o.id,
+                    o.projectionVersion,
+                    "ORDER",
+                    o.id,
+                    null,
+                    null);
+        } else if ("DELIVERY_MANUALLY_COMPLETED".equals(action)) {
+            notices.enqueue(
+                    o.buyerId,
+                    "ORDER_DELIVERED",
+                    o.id,
+                    o.projectionVersion,
+                    "ORDER",
+                    o.id,
+                    null,
+                    null);
+        }
     }
 }

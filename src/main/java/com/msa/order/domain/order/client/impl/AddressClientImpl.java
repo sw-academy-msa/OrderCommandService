@@ -1,6 +1,7 @@
 package com.msa.order.domain.order.client.impl;
 
 import com.msa.order.domain.order.client.*;
+import com.msa.order.domain.order.client.dto.response.AddressEnvelope;
 import com.msa.order.domain.order.client.dto.response.AddressReply;
 import com.msa.order.domain.order.entity.ShippingAddress;
 import com.msa.order.global.config.client.ClientsProperties;
@@ -22,15 +23,18 @@ public class AddressClientImpl implements AddressClient {
     }
 
     public ShippingAddress get(UUID id, String token) {
-        var reply =
+        // Account는 공통 응답 봉투로 감싸 응답하므로 data를 꺼내 읽습니다.
+        var envelope =
                 http.exchange(
                         properties.account(),
                         HttpMethod.GET,
                         "/api/v1/accounts/me/addresses/" + id,
                         null,
                         token,
-                        AddressReply.class);
-        if (!id.equals(reply.addressId())) {
+                        AddressEnvelope.class);
+        AddressReply reply = envelope.data();
+        // 본문이 없거나 요청한 ID와 다르면 다른 배송지가 주문에 저장되지 않도록 차단합니다.
+        if (reply == null || !id.equals(reply.addressId())) {
             throw new RemoteFailure("INVALID_ADDRESS_RESPONSE", false);
         }
         return reply.snapshot();

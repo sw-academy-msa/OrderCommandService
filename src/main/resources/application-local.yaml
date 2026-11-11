@@ -5,6 +5,9 @@ spring:
     username: ${DB_USERNAME:orders}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  flyway:
+    # 기존 로컬 orders 스키마에 약관 전용 이력을 추가합니다. 기존 주문을 변경하지 않습니다.
+    baseline-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: update
@@ -16,5 +19,7 @@ springdoc:
     path: /swagger-ui.html
 order:
   service-auth:
-    # 로컬 루프백 접속만 HTTP로 허용하며 운영은 TLS가 필요합니다.
+    # 로컬 프로필에서만 HTTP 자격증명 전송을 허용하며 운영은 TLS가 필요합니다.
     allow-insecure-local: true
+  clients:
+    scheme: http

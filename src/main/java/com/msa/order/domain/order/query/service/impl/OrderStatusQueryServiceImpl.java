@@ -18,8 +18,13 @@ import java.util.UUID;
 public class OrderStatusQueryServiceImpl implements OrderStatusQueryService {
     private final OrderRepository orders;
     private final Clock clock;
+    private final com.msa.order.domain.terms.query.service.CheckoutTermsService terms;
 
-    public OrderStatusQueryServiceImpl(OrderRepository orders, Clock clock) {
+    public OrderStatusQueryServiceImpl(
+            OrderRepository orders,
+            Clock clock,
+            com.msa.order.domain.terms.query.service.CheckoutTermsService terms) {
+        this.terms = terms;
         this.orders = orders;
         this.clock = clock;
     }
@@ -37,6 +42,9 @@ public class OrderStatusQueryServiceImpl implements OrderStatusQueryService {
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
             throw new OrderException(OrderErrorCode.OWNER);
         }
-        return CheckoutResponse.from(o, clock.instant());
+        return CheckoutResponse.from(
+                o,
+                clock.instant(),
+                o.termsVersion == null ? terms.current().version() : o.termsVersion);
     }
 }

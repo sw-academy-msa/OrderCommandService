@@ -31,7 +31,8 @@ public record CheckoutResponse(
         Instant confirmedAt,
         String carrier,
         String trackingNumber,
-        String failureCode) {
+        String failureCode,
+        String termsVersion) {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
     public static class CheckoutResponseBuilder {
         @Override
@@ -88,6 +89,11 @@ public record CheckoutResponse(
     }
 
     public static CheckoutResponse from(PurchaseOrder o, Instant now) {
+        return from(o, now, o.termsVersion);
+    }
+
+    /** 결제 전 현재 버전을 전달하고, 동의 후에는 해당 주문이 동의한 버전을 유지합니다. */
+    public static CheckoutResponse from(PurchaseOrder o, Instant now, String currentTermsVersion) {
         return CheckoutResponse.builder()
                 .orderId(o.id)
                 .orderNumber("SD-" + o.id)
@@ -119,6 +125,7 @@ public record CheckoutResponse(
                 .confirmedAt(o.confirmedAt)
                 .carrier(o.carrier)
                 .trackingNumber(o.trackingNumber)
+                .termsVersion(o.termsVersion == null ? currentTermsVersion : o.termsVersion)
                 .failureCode(o.lastFailureCode)
                 .build();
     }

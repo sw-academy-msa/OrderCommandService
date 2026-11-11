@@ -42,3 +42,17 @@ Lombok은 Spring Boot가 관리하는 버전을 compileOnly·annotationProcessor
 공개 JSON 성공 응답은 Account와 같은 success/code/message/data 구조입니다. 업무 결과는 data에서 읽습니다. 주문 생성·결제 시도는 기존 HTTP 202를 유지하고 나머지는 200입니다. 이미지 삭제도 200과 data:null을 반환합니다. 오류 응답과 Kafka·내부 HTTP 호출 계약, 기존 DTO 변환은 유지합니다. Mapper는 추가하지 않습니다.
 
 공통 success:true는 요청 처리 성공을 의미하며 주문·결제 확정을 뜻하지 않습니다. 최종 상태는 data.state와 Command 상태 조회로 확인합니다.
+
+## 주문·결제 약관
+
+약관 본문은 orders.checkout_terms에 버전별로 보존하며 Flyway가 초기 등록합니다. checkout 응답에 termsVersion을 전달하고 기존 결제 요청의 버전 검증과 동의 시각 저장을 재사용합니다. BUYER는 PurchaseGateway를 통해 현재·과거 본문을 조회합니다. [약관 API와 Flyway 적용 안내](contracts/checkout-terms.md)를 확인합니다. 초기 본문은 기획 기준 초안이며 운영 적용 전 검토가 필요합니다.
+
+## 회원탈퇴 연동
+
+[원본 확인, 신규 거래 차단과 장애 회수 계약](contracts/account-withdrawal-v1.md)을 확인합니다.
+완료된 판매 이력은 탈퇴 차단 사유가 아닙니다. 진행 거래와 미확정 결제/보상만 확인하며 수수료는 후속 구현 범위입니다.
+
+## 일반 업무 알림
+
+[심사 결과, 보완 요청과 기한, 주문 확정과 배송 알림 계약](contracts/business-notifications-v1.md)을 확인합니다.
+상태 변경과 Outbox는 함께 커밋하며 기존 구매 Saga와 결제 Kafka 계약은 유지합니다.

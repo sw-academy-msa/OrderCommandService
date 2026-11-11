@@ -22,7 +22,7 @@ public abstract class OrderDatabaseTestSupport {
         r.add("spring.datasource.url", DB::getJdbcUrl);
         r.add("spring.datasource.username", DB::getUsername);
         r.add("spring.datasource.password", DB::getPassword);
-        r.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+        r.add("spring.jpa.hibernate.ddl-auto", () -> "update");
     }
 
     @TestConfiguration

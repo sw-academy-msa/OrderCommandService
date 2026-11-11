@@ -53,7 +53,10 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     static void clients(DynamicPropertyRegistry r) {
         for (String name : List.of("product", "payment", "account")) {
             r.add("order.clients." + name + ".enabled", () -> "true");
-            r.add("order.clients." + name + ".base-url", HTTP::url);
+        }
+        // Eureka 대신 Spring Cloud 단순 탐색에 fixture를 등록해 운영과 같은 LoadBalancer 선택 경로를 탑니다.
+        for (String service : List.of("product-command-service", "account-service")) {
+            r.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri", HTTP::url);
         }
         r.add("order.clients.product.token", () -> "fixture-product-token");
         r.add("order.clients.payment.token", () -> "fixture-payment-token");
