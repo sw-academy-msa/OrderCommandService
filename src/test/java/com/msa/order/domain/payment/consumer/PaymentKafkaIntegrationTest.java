@@ -7,6 +7,7 @@ import com.msa.order.domain.order.client.PaymentClient;
 import com.msa.order.domain.order.client.dto.response.PaymentReply;
 import com.msa.order.domain.order.entity.PurchaseOrder;
 import com.msa.order.domain.order.repository.OrderRepository;
+import com.msa.order.domain.outbox.scheduling.OutboxPublishJob;
 import com.msa.order.domain.outbox.service.OutboxPublisher;
 import com.msa.order.domain.payment.InvalidPaymentEventException;
 import com.msa.order.domain.payment.dto.response.PaymentResultEvent;
@@ -24,6 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.*;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 
@@ -71,6 +73,9 @@ class PaymentKafkaIntegrationTest extends OrderDatabaseTestSupport {
     static void kafka(DynamicPropertyRegistry r) {
         r.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
     }
+
+    // 기동 직후 예약 작업이 테스트가 넣은 Outbox 행을 먼저 잠그지 않게 합니다. 발행은 테스트가 직접 호출합니다.
+    @MockitoBean OutboxPublishJob publishJob;
 
     @Autowired PaymentClient client;
     @Autowired PaymentResultService results;
