@@ -25,14 +25,13 @@ spring:
         max-retries-on-same-service-instance: 0
         max-retries-on-next-service-instance: 1
         retryable-exceptions: java.net.ConnectException, java.net.http.HttpConnectTimeoutException
+  # 업무 테이블과 약관을 db/migration의 한 버전 순서로 관리합니다. V1 업무 테이블, V2 약관 테이블, V3 약관 초기 본문입니다.
   flyway:
-    locations: classpath:db/checkout-terms
+    locations: classpath:db/migration
     default-schema: orders
     schemas: orders
-    create-schemas: false
-    # 기존 주문 스키마의 전체 마이그레이션 이력으로 오인하지 않도록 약관 전용 이력을 사용합니다.
-    table: checkout_terms_schema_history
-    baseline-version: 0
+    create-schemas: true
+    # 운영은 빈 DB에서 V1부터 실행하며, 이미 테이블이 있는 DB를 자동으로 기준점 처리하지 않습니다.
     baseline-on-migrate: false
     clean-disabled: true
   jpa:
