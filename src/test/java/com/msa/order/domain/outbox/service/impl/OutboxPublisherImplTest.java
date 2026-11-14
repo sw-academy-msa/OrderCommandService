@@ -3,6 +3,7 @@ package com.msa.order.domain.outbox.service.impl;
 import static org.assertj.core.api.Assertions.*;
 
 import com.msa.order.domain.outbox.entity.OutboxEvent;
+import com.msa.order.domain.outbox.scheduling.OutboxPublishJob;
 import com.msa.order.domain.outbox.service.OutboxPublisher;
 import com.msa.order.global.config.database.OrderDatabaseTestSupport;
 
@@ -19,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 
@@ -50,6 +52,9 @@ class OutboxPublisherImplTest extends OrderDatabaseTestSupport {
     static void kafka(DynamicPropertyRegistry registry) {
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
     }
+
+    // 기동 직후 예약 작업이 테스트가 넣은 Outbox 행을 먼저 잠그지 않게 합니다. 발행은 테스트가 직접 호출합니다.
+    @MockitoBean OutboxPublishJob publishJob;
 
     @Autowired OutboxPublisher publisher;
     @Autowired JdbcTemplate jdbc;
