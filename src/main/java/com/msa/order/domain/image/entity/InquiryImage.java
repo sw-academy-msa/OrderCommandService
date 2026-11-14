@@ -9,7 +9,17 @@ import java.util.UUID;
 
 /** 주문 문의 첨부 메타데이터입니다. 비공개 객체 키만 보관하고 서명 URL은 저장하지 않습니다. */
 @Entity
-@Table(name = "inquiry_images", schema = "orders")
+@Table(
+        name = "inquiry_images",
+        schema = "orders",
+        indexes = {
+            // 문의 상세의 첨부 목록입니다.
+            @Index(name = "idx_inquiry_image_inquiry", columnList = "inquiryId"),
+            // 업로드 직후 주문별 대기 이미지 개수를 셉니다.
+            @Index(name = "idx_inquiry_image_order", columnList = "orderId"),
+            // 정리 작업이 만료된 미정리 이미지를 만료 순으로 찾습니다.
+            @Index(name = "idx_inquiry_image_cleanup", columnList = "cleaned,expiresAt")
+        })
 public class InquiryImage {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
     public static class InquiryImageBuilder {
