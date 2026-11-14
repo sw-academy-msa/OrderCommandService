@@ -13,7 +13,11 @@ import java.util.*;
         name = "purchase_orders",
         schema = "orders",
         uniqueConstraints = @UniqueConstraint(columnNames = {"buyer_id", "request_key"}),
-        indexes = @Index(name = "idx_order_saga_due", columnList = "nextAttemptAt,leaseUntil"))
+        indexes = {
+            @Index(name = "idx_order_saga_due", columnList = "nextAttemptAt,leaseUntil"),
+            // 탈퇴 확인이 판매자 ID로 진행 중 주문을 찾습니다. 구매자 ID는 위 유니크 제약이 처리합니다.
+            @Index(name = "idx_order_seller", columnList = "sellerId")
+        })
 public class PurchaseOrder {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
     public static class PurchaseOrderBuilder {
