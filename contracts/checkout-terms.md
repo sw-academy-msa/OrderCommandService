@@ -19,12 +19,12 @@ Order Command가 자기 DB의 orders.checkout_terms만 소유한다. 본문과 �
 ## Flyway 초기 적용
 
 - 의존성: Spring Boot 관리 버전의 spring-boot-starter-flyway와 flyway-database-postgresql.
-- 위치: classpath:db/checkout-terms, 스키마: orders, 이력 테이블: checkout_terms_schema_history.
-- V1은 약관 테이블과 불변 트리거만 생성하고 V2는 checkout-v1을 등록한다. 기존 주문·결제·Saga 업무 테이블을 생성하거나 삭제하지 않는다.
-- local은 기존 Hibernate 테이블이 있는 orders에 baseline 0을 명시하여 약관 전용 이력을 시작한다. V1/V2를 건너뛰지 않는다. 개발 ddl-auto=update는 기존 업무 테이블에 그대로 유지한다.
-- prod의 baseline-on-migrate는 false다. 이미 데이터가 있는 운영 orders는 배포 담당자가 DB와 스키마를 확인하고 약관 전용 이력의 baseline 0을 먼저 준비해야 한다. 운영에서 자동 baseline을 무조건 켜거나 기존 테이블을 지우지 않는다. 나머지 업무 테이블의 운영 DDL 준비와 validate 정책은 별개다.
+- 위치: classpath:db/migration, 스키마: orders, 이력 테이블: 기본 flyway_schema_history. 업무 테이블과 약관을 한 버전 순서로 관리한다.
+- V1은 주문·결제·Saga 업무 테이블, V2는 약관 테이블과 불변 트리거, V3은 checkout-v1 등록이다. 이전 db/checkout-terms의 V1/V2를 내용 변경 없이 V2/V3으로 옮겼다.
+- prod는 빈 RDS에서 V1부터 실행하고 ddl-auto=validate로 엔티티와 일치하는지 검사한다. baseline-on-migrate는 false이며 기존 테이블을 지우지 않는다.
+- local은 Flyway 통합 전 update와 약관 전용 이력으로 V1~V3 내용이 이미 있는 DB를 baseline 3으로 기록하고 SQL을 실행하지 않는다. 이전 checkout_terms_schema_history는 더 이상 읽지 않는다. 개발 ddl-auto=update는 유지한다.
 - clean은 비활성이다. 적용된 SQL을 수정하면 checksum 오류가 발생하므로 본문 수정도 새 버전과 새 migration으로 추가한다.
-- 테스트에서는 Flyway seed가 Hibernate create-drop으로 사라지지 않도록 격리 PostgreSQL을 update로 준비한다. 개발 DB나 .env를 사용하지 않는다.
+- 테스트에서는 Flyway seed가 Hibernate create-drop으로 사라지지 않도록 격리 PostgreSQL을 update로 준비한다. FlywayMigrationTest는 빈 DB에 V1~V3만 적용한 뒤 validate로 기동한다. 개발 DB나 .env를 사용하지 않는다.
 
 ## 개정 절차
 
