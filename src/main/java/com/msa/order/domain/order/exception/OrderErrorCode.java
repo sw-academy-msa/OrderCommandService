@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 public enum OrderErrorCode implements ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다."),
     OWNER(HttpStatus.FORBIDDEN, "ORDER_OWNER", "본인 주문만 처리할 수 있습니다."),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "ORDER_FORBIDDEN", "운영자 계정은 주문할 수 없습니다."),
     STATE(HttpStatus.CONFLICT, "ORDER_STATE", "현재 주문 상태에서는 처리할 수 없습니다."),
     DUPLICATE(HttpStatus.CONFLICT, "ORDER_DUPLICATE", "같은 요청 키의 주문 내용이 다릅니다."),
     INVALID(HttpStatus.BAD_REQUEST, "ORDER_INVALID", "주문 입력값이 올바르지 않습니다."),

@@ -37,6 +37,10 @@ public class OrderCommandController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ResponseEntity<ApiResponse<CheckoutResponse>> create(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderRequests.Create r) {
+        // 운영자도 BUYER 역할을 함께 가지므로 역할 검사만으로는 막히지 않습니다. 주문 생성 전에 거절합니다.
+        if (isAdmin(jwt)) {
+            throw new OrderException(OrderErrorCode.FORBIDDEN);
+        }
         return response(
                 () -> commands.create(UUID.fromString(jwt.getSubject()), r, jwt.getTokenValue()),
                 true);
@@ -67,6 +71,12 @@ public class OrderCommandController {
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Payment r) {
         return response(() -> commands.payment(UUID.fromString(jwt.getSubject()), id, r), true);
+    }
+
+    /** 보안 설정과 같은 roles 클레임을 읽습니다. 클레임이 없거나 형식이 다르면 운영자로 보지 않습니다. */
+    private boolean isAdmin(Jwt jwt) {
+        Object roles = jwt.getClaims().get("roles");
+        return roles instanceof java.util.Collection<?> values && values.contains("ADMIN");
     }
 
     private ResponseEntity<ApiResponse<CheckoutResponse>> response(

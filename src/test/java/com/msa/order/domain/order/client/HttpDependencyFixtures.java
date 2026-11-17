@@ -18,6 +18,8 @@ public class HttpDependencyFixtures implements AutoCloseable {
     public final UUID seller = UUID.randomUUID();
     public Clock clock = Clock.systemUTC();
     public volatile boolean stockDenied;
+    // 재고 거절 시 Product가 보낼 오류 코드입니다. 기본은 재고 부족입니다.
+    public volatile String stockDeniedCode = "PRODUCT_STOCK";
     public volatile boolean reserveReplyLost;
     public volatile boolean paymentReplyLost;
     public volatile boolean accountUnavailable;
@@ -55,6 +57,7 @@ public class HttpDependencyFixtures implements AutoCloseable {
         reservations.clear();
         payments.clear();
         stockDenied = false;
+        stockDeniedCode = "PRODUCT_STOCK";
         reserveReplyLost = false;
         paymentReplyLost = false;
         accountUnavailable = false;
@@ -133,7 +136,7 @@ public class HttpDependencyFixtures implements AutoCloseable {
         if (path.equals(base)) {
             reserveCalls.incrementAndGet();
             if (stockDenied) {
-                respond(e, 409, Map.of("code", "PRODUCT_STOCK"));
+                respond(e, 409, Map.of("code", stockDeniedCode));
                 return;
             }
             UUID order = UUID.fromString(body.path("orderId").asText());
