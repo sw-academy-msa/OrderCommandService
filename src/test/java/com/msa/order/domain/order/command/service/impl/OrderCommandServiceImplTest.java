@@ -228,6 +228,12 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         assertThat(o.state()).isEqualTo(FAILED);
         assertThat(o.failureCode()).isEqualTo("PRODUCT_SELF_PURCHASE");
         assertThat(HTTP.approveCalls.get()).isZero();
+        // 복구 작업이 돌아도 다시 확보하거나 결제 명령을 남기지 않습니다.
+        clock.set(clock.instant().plusSeconds(65));
+        saga.recover();
+        assertThat(queries.buyer(buyer, o.orderId()).state()).isEqualTo(FAILED);
+        assertThat(HTTP.reserveCalls.get()).isEqualTo(1);
+        assertThat(commandCount("APPROVE")).isZero();
     }
 
     @Test
