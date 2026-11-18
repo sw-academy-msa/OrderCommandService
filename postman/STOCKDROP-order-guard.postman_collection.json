@@ -45,6 +45,16 @@
           "name": "2. 구매자 로그인 → buyerToken",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('buyerLoginBody', JSON.stringify({ email: pm.variables.get('buyerEmail'), password: pm.variables.get('buyerPassword') }));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -70,7 +80,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{ \"email\": \"{{buyerEmail}}\", \"password\": \"{{buyerPassword}}\" }"
+              "raw": "{{buyerLoginBody}}"
             },
             "url": "{{gatewayUrl}}/api/v1/auth/login"
           }
@@ -98,6 +108,16 @@
           "name": "3. 판매자 로그인 → sellerToken",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('sellerLoginBody', JSON.stringify({ email: pm.variables.get('sellerEmail'), password: pm.variables.get('sellerPassword') }));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -123,7 +143,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{ \"email\": \"{{sellerEmail}}\", \"password\": \"{{sellerPassword}}\" }"
+              "raw": "{{sellerLoginBody}}"
             },
             "url": "{{gatewayUrl}}/api/v1/auth/login"
           }
@@ -151,6 +171,16 @@
           "name": "4. 운영자 로그인 → adminToken",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('adminLoginBody', JSON.stringify({ email: pm.variables.get('adminEmail'), password: pm.variables.get('adminPassword') }));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -176,7 +206,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{ \"email\": \"{{adminEmail}}\", \"password\": \"{{adminPassword}}\" }"
+              "raw": "{{adminLoginBody}}"
             },
             "url": "{{gatewayUrl}}/api/v1/auth/login"
           }
@@ -298,7 +328,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));"
+                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));",
+                  "// DB 확인용으로 이번 운영자 요청의 requestKey를 남깁니다. 로그에 비밀값은 없습니다.",
+                  "pm.collectionVariables.set('adminRequestKey', pm.collectionVariables.get('orderRequestKey') || pm.variables.get('orderRequestKey')); console.log('adminRequestKey', pm.variables.get('orderRequestKey'));"
                 ]
               }
             },
