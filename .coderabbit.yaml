@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Account의 검토 관례를 Order 원본·영속 Saga에 맞춥니다.
+language: ko-KR
+tone_instructions: "한국어로 실제 버그·보안·정합성 문제를 구체적으로 설명하세요. 취향에 따른 구조 변경을 반복 요청하지 마세요."
+reviews:
+  profile: chill
+  high_level_summary: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches: ["^main$", "^develop$"]
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+  path_instructions:
+    - path: "src/main/java/com/msa/order/**"
+      instructions: |
+        Java 21 / Boot 4.1.1 / Cloud 2025.1.4의 Order Command입니다.
+        orders 원본과 Saga만 소유합니다. Product 재고는 내부 HTTP, 변경 전파는 Outbox/Kafka입니다.
+        외부 HTTP 중 DB 잠금 유지, 타임아웃을 실패로 단정, 결과 불명 결제의 재고 반환을 확인하세요.
+        임대 토큰·멱등 키·동일 주문 재시도·보상 전 결제 취소 확인이 중요합니다.
+        서비스 토큰·Payment 앱은 별도 연결이 필요합니다. 가짜 성공·개인키 복사를 추가하지 마세요.
+        JWT와 주문 소유권을 함께 검사합니다. 배송지·문의 사진은 비공개입니다.
+        한국어 주석, service와 service/impl, request/response DTO 분리를 유지합니다.
+        취소/반품 접수·도착 예정일·선착순 순번·Order Query/정산은 현재 범위 밖입니다.
+    - path: "src/test/**"
+      instructions: |
+        PostgreSQL/Kafka/S3Mock와 HTTP fixture의 보장 범위를 구분하세요.
+        테스트 Payment 응답은 실제 토스 승인 또는 운영 인증 검증이 아닙니다.
