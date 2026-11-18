@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -36,7 +37,13 @@ public class OrderCommandController {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ResponseEntity<ApiResponse<CheckoutResponse>> create(
-            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderRequests.Create r) {
+            @AuthenticationPrincipal Jwt jwt,
+            Authentication authentication,
+            @Valid @RequestBody OrderRequests.Create r) {
+        // 운영자도 BUYER 역할을 함께 가지므로 역할 검사만으로는 막히지 않습니다. 주문 생성 전에 거절합니다.
+        if (isAdmin(authentication)) {
+            throw new OrderException(OrderErrorCode.FORBIDDEN);
+        }
         return response(
                 () -> commands.create(UUID.fromString(jwt.getSubject()), r, jwt.getTokenValue()),
                 true);
@@ -67,6 +74,13 @@ public class OrderCommandController {
             @PathVariable UUID id,
             @Valid @RequestBody OrderRequests.Payment r) {
         return response(() -> commands.payment(UUID.fromString(jwt.getSubject()), id, r), true);
+    }
+
+    /** 보안 설정의 roles 변환기가 부여한 권한으로 판단합니다. 원본 클레임을 따로 해석하지 않아 형식이 달라도 판단이 어긋나지 않습니다. */
+    private boolean isAdmin(Authentication authentication) {
+        return authentication != null
+                && authentication.getAuthorities().stream()
+                        .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     private ResponseEntity<ApiResponse<CheckoutResponse>> response(

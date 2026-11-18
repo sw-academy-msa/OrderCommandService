@@ -1,0 +1,627 @@
+{
+  "info": {
+    "name": "STOCKDROP 주문 제한 (운영자·판매자 본인 상품)",
+    "description": "운영자 주문 403 ORDER_FORBIDDEN, 판매자 본인 상품 주문 FAILED + PRODUCT_SELF_PURCHASE, 일반 주문 정상 흐름을 확인합니다. 사용법은 같은 폴더의 README.md를 봅니다.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "csrfHeader",
+      "value": "X-XSRF-TOKEN"
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "pollCount",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 로그인",
+      "item": [
+        {
+          "name": "1. CSRF 토큰",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('csrfHeader', d.headerName); pm.collectionVariables.set('csrfToken', d.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{gatewayUrl}}/api/v1/auth/csrf"
+          }
+        },
+        {
+          "name": "2. 구매자 로그인 → buyerToken",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('buyerLoginBody', JSON.stringify({ email: pm.variables.get('buyerEmail'), password: pm.variables.get('buyerPassword') }));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.environment.set('buyerToken', d.accessToken);",
+                  "pm.test('BUYER만 보유', () => { pm.expect(d.roles).to.include('BUYER'); pm.expect(d.roles).to.not.include('ADMIN'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "{{csrfHeader}}",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{buyerLoginBody}}"
+            },
+            "url": "{{gatewayUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "2-1. CSRF 재발급",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('csrfHeader', d.headerName); pm.collectionVariables.set('csrfToken', d.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{gatewayUrl}}/api/v1/auth/csrf"
+          }
+        },
+        {
+          "name": "3. 판매자 로그인 → sellerToken",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('sellerLoginBody', JSON.stringify({ email: pm.variables.get('sellerEmail'), password: pm.variables.get('sellerPassword') }));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.environment.set('sellerToken', d.accessToken);",
+                  "pm.test('SELLER 보유', () => pm.expect(d.roles).to.include('SELLER'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "{{csrfHeader}}",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{sellerLoginBody}}"
+            },
+            "url": "{{gatewayUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "3-1. CSRF 재발급",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('csrfHeader', d.headerName); pm.collectionVariables.set('csrfToken', d.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{gatewayUrl}}/api/v1/auth/csrf"
+          }
+        },
+        {
+          "name": "4. 운영자 로그인 → adminToken",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 비밀번호에 역슬래시·따옴표가 있어도 깨지지 않게 본문을 JSON으로 직렬화합니다.",
+                  "pm.variables.set('adminLoginBody', JSON.stringify({ email: pm.variables.get('adminEmail'), password: pm.variables.get('adminPassword') }));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.environment.set('adminToken', d.accessToken);",
+                  "pm.test('ADMIN과 BUYER 함께 보유', () => { pm.expect(d.roles).to.include('ADMIN'); pm.expect(d.roles).to.include('BUYER'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "{{csrfHeader}}",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{adminLoginBody}}"
+            },
+            "url": "{{gatewayUrl}}/api/v1/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 배송지 준비",
+      "item": [
+        {
+          "name": "1. 구매자 배송지 등록",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('buyerAddressId', pm.response.json().data.addressId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{buyerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"label\": \"집\", \"recipientName\": \"테스트구매자\", \"recipientPhone\": \"010-1234-5678\", \"postalCode\": \"06236\", \"roadAddress\": \"서울특별시 강남구 테헤란로 1\", \"detailAddress\": \"101호\", \"deliveryMemo\": \"문 앞\" }"
+            },
+            "url": "{{gatewayUrl}}/api/v1/accounts/me/addresses"
+          }
+        },
+        {
+          "name": "2. 판매자 배송지 등록",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('sellerAddressId', pm.response.json().data.addressId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sellerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"label\": \"집\", \"recipientName\": \"테스트판매자\", \"recipientPhone\": \"010-2345-6789\", \"postalCode\": \"06236\", \"roadAddress\": \"서울특별시 강남구 테헤란로 2\", \"detailAddress\": \"202호\", \"deliveryMemo\": \"문 앞\" }"
+            },
+            "url": "{{gatewayUrl}}/api/v1/accounts/me/addresses"
+          }
+        },
+        {
+          "name": "3. 운영자 배송지 등록",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminAddressId', pm.response.json().data.addressId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"label\": \"집\", \"recipientName\": \"테스트운영자\", \"recipientPhone\": \"010-3456-7890\", \"postalCode\": \"06236\", \"roadAddress\": \"서울특별시 강남구 테헤란로 3\", \"detailAddress\": \"303호\", \"deliveryMemo\": \"문 앞\" }"
+            },
+            "url": "{{gatewayUrl}}/api/v1/accounts/me/addresses"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 주문 제한",
+      "item": [
+        {
+          "name": "1. 운영자 주문 → 403 ORDER_FORBIDDEN",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));",
+                  "// DB 확인용으로 이번 운영자 요청의 requestKey를 남깁니다. 로그에 비밀값은 없습니다.",
+                  "pm.collectionVariables.set('adminRequestKey', pm.collectionVariables.get('orderRequestKey') || pm.variables.get('orderRequestKey')); console.log('adminRequestKey', pm.variables.get('orderRequestKey'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('code ORDER_FORBIDDEN', () => pm.expect(body.code).to.eql('ORDER_FORBIDDEN'));",
+                  "// 주문 생성 전에 거절되므로 주문 ID가 응답에 없어야 합니다.",
+                  "pm.test('주문이 만들어지지 않음', () => pm.expect(body.data && body.data.orderId).to.not.be.ok);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"requestKey\": \"{{orderRequestKey}}\", \"productId\": \"{{sellerProductId}}\", \"items\": [ { \"optionId\": \"{{sellerOptionId}}\", \"quantity\": 1 } ], \"addressId\": \"{{adminAddressId}}\" }"
+            },
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "2. 판매자 본인 상품 주문 → 202",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('selfOrderId', pm.response.json().data.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sellerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"requestKey\": \"{{orderRequestKey}}\", \"productId\": \"{{sellerProductId}}\", \"items\": [ { \"optionId\": \"{{sellerOptionId}}\", \"quantity\": 1 } ], \"addressId\": \"{{sellerAddressId}}\" }"
+            },
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "3. 판매자 본인 상품 checkout → FAILED + PRODUCT_SELF_PURCHASE",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.collectionVariables.get('pollCount') || 0) > 0) { setTimeout(() => {}, 2000); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 확보 결과는 비동기로 확정되므로 RESERVING이 끝날 때까지 최대 10번 다시 조회합니다.",
+                  "const d = pm.response.json().data;",
+                  "const done = d && d.state !== 'RESERVING';",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (!done && n < 10) { pm.collectionVariables.set('pollCount', n + 1); postman.setNextRequest(pm.info.requestName); } else {",
+                  "pm.collectionVariables.set('pollCount', 0);",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('state FAILED', () => pm.expect(d.state).to.eql('FAILED'));",
+                  "pm.test('failureCode PRODUCT_SELF_PURCHASE', () => pm.expect(d.failureCode).to.eql('PRODUCT_SELF_PURCHASE'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sellerToken}}"
+              }
+            ],
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders/{{selfOrderId}}/checkout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 정상 주문 회귀",
+      "item": [
+        {
+          "name": "1. 구매자 주문 → 202",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('buyerOrderId', pm.response.json().data.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{buyerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"requestKey\": \"{{orderRequestKey}}\", \"productId\": \"{{sellerProductId}}\", \"items\": [ { \"optionId\": \"{{sellerOptionId}}\", \"quantity\": 1 } ], \"addressId\": \"{{buyerAddressId}}\" }"
+            },
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "2. 구매자 checkout → HELD",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.collectionVariables.get('pollCount') || 0) > 0) { setTimeout(() => {}, 2000); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "const done = d && d.state !== 'RESERVING';",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (!done && n < 10) { pm.collectionVariables.set('pollCount', n + 1); postman.setNextRequest(pm.info.requestName); } else {",
+                  "pm.collectionVariables.set('pollCount', 0);",
+                  "pm.test('state HELD', () => pm.expect(d.state).to.eql('HELD'));",
+                  "pm.test('failureCode 없음', () => pm.expect(d.failureCode).to.not.be.ok);",
+                  "pm.test('금액 계산됨', () => pm.expect(d.totalAmount).to.be.above(0));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{buyerToken}}"
+              }
+            ],
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders/{{buyerOrderId}}/checkout"
+          }
+        },
+        {
+          "name": "3. 판매자가 남의 상품 주문 → 202",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('orderRequestKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('sellerOrderId', pm.response.json().data.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sellerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"requestKey\": \"{{orderRequestKey}}\", \"productId\": \"{{otherProductId}}\", \"items\": [ { \"optionId\": \"{{otherOptionId}}\", \"quantity\": 1 } ], \"addressId\": \"{{sellerAddressId}}\" }"
+            },
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "4. 판매자 checkout → HELD",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.collectionVariables.get('pollCount') || 0) > 0) { setTimeout(() => {}, 2000); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "const done = d && d.state !== 'RESERVING';",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (!done && n < 10) { pm.collectionVariables.set('pollCount', n + 1); postman.setNextRequest(pm.info.requestName); } else {",
+                  "pm.collectionVariables.set('pollCount', 0);",
+                  "pm.test('state HELD', () => pm.expect(d.state).to.eql('HELD'));",
+                  "pm.test('failureCode 없음', () => pm.expect(d.failureCode).to.not.be.ok);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sellerToken}}"
+              }
+            ],
+            "url": "{{purchaseGatewayUrl}}/api/v1/orders/{{sellerOrderId}}/checkout"
+          }
+        }
+      ]
+    }
+  ]
+}

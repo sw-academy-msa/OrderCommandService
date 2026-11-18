@@ -220,6 +220,48 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     }
 
     @Test
+    void sellerOwnProductRejectionFailsWithoutRetry() {
+        HTTP.stockDenied = true;
+        HTTP.stockDeniedCode = "PRODUCT_SELF_PURCHASE";
+        var o = create();
+        // 재시도 대상이 아니라 즉시 실패로 확정되어야 프론트가 바로 안내할 수 있습니다.
+        assertThat(o.state()).isEqualTo(FAILED);
+        assertThat(o.failureCode()).isEqualTo("PRODUCT_SELF_PURCHASE");
+        assertThat(HTTP.approveCalls.get()).isZero();
+        // 복구 작업이 돌아도 다시 확보하거나 결제 명령을 남기지 않습니다.
+        clock.set(clock.instant().plusSeconds(65));
+        saga.recover();
+        assertThat(queries.buyer(buyer, o.orderId()).state()).isEqualTo(FAILED);
+        assertThat(HTTP.reserveCalls.get()).isEqualTo(1);
+        assertThat(commandCount("APPROVE")).isZero();
+    }
+
+    @Test
+    void mvcRejectsAdminOrderBeforeCreatingIt() throws Exception {
+        long before = orders.count();
+        mvc.perform(
+                        post("/api/v1/orders")
+                                .with(
+                                        jwt().jwt(
+                                                        j ->
+                                                                j.subject(buyer.toString())
+                                                                        .claim(
+                                                                                "roles",
+                                                                                List.of(
+                                                                                        "ADMIN",
+                                                                                        "BUYER")))
+                                                .authorities(
+                                                        new SimpleGrantedAuthority("ROLE_BUYER"),
+                                                        new SimpleGrantedAuthority("ROLE_ADMIN")))
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(request())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ORDER_FORBIDDEN"));
+        assertThat(orders.count()).isEqualTo(before);
+        assertThat(HTTP.reserveCalls.get()).isZero();
+    }
+
+    @Test
     void accountFailureDoesNotCreateOrder() {
         HTTP.accountUnavailable = true;
         assertThatThrownBy(this::create)

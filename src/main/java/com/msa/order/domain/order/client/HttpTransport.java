@@ -134,6 +134,8 @@ public class HttpTransport {
                                                                         "PRODUCT_STOCK",
                                                                         "PRODUCT_STATE",
                                                                         "PRODUCT_DUPLICATE",
+                                                                        // 판매자 본인 상품 확보 거절입니다. 재시도해도 결과가 같아 확정 실패로 둡니다.
+                                                                        "PRODUCT_SELF_PURCHASE",
                                                                         "PRODUCT_EXPIRED",
                                                                         "PRODUCT_NOT_FOUND",
                                                                         "PRODUCT_INVALID")
