@@ -66,6 +66,7 @@ public class OrderJournalImpl implements OrderJournal {
         snapshot.put("trackingNumber", o.trackingNumber);
         snapshot.put("shippedAt", o.shippedAt);
         snapshot.put("deliveredAt", o.deliveredAt);
+        snapshot.put("purchaseConfirmedAt", o.purchaseConfirmedAt);
         UUID eventId = UUID.randomUUID();
         var event =
                 Map.of(

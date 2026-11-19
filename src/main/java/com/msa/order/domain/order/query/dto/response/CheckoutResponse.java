@@ -31,6 +31,7 @@ public record CheckoutResponse(
         Instant confirmedAt,
         String carrier,
         String trackingNumber,
+        Instant purchaseConfirmedAt,
         String failureCode,
         String termsVersion) {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
@@ -125,6 +126,7 @@ public record CheckoutResponse(
                 .confirmedAt(o.confirmedAt)
                 .carrier(o.carrier)
                 .trackingNumber(o.trackingNumber)
+                .purchaseConfirmedAt(o.purchaseConfirmedAt)
                 .termsVersion(o.termsVersion == null ? currentTermsVersion : o.termsVersion)
                 .failureCode(o.lastFailureCode)
                 .build();
