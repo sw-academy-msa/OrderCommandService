@@ -38,6 +38,17 @@ public interface OrderRepository extends JpaRepository<PurchaseOrder, UUID> {
     Optional<UUID> findNextDueId(@Param("now") Instant now);
 
     /** 주문 엔티티를 미리 적재하지 않아 이후 쓰기 잠금 전에 오래된 상태가 영속성 컨텍스트에 남지 않습니다. */
+    /** 자동 구매 확정 후보: 결제 확정, 배송 완료가 before 이전이고 아직 구매 확정 전인 주문 */
+    @Query(
+            "select o.id from PurchaseOrder o"
+                    + " where o.state = com.msa.order.domain.order.entity.PurchaseOrder.State.CONFIRMED"
+                    + " and o.delivery = com.msa.order.domain.order.entity.PurchaseOrder.Delivery.DELIVERED"
+                    + " and o.purchaseConfirmedAt is null and o.deliveredAt < :before"
+                    + " order by o.deliveredAt")
+    List<UUID> autoConfirmIds(
+            @Param("before") java.time.Instant before,
+            org.springframework.data.domain.Pageable page);
+
     @Query("select o.id from PurchaseOrder o where o.paymentAttemptId=:attempt")
     List<UUID> findIdsByPaymentAttemptId(@Param("attempt") UUID attempt);
 }

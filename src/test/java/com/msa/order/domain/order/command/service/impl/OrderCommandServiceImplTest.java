@@ -71,6 +71,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     @Autowired OrderWriteStore writeStore;
     @Autowired OrderInquiryService inquiries;
     @Autowired MutableClock clock;
+    @Autowired com.msa.order.domain.order.command.scheduling.PurchaseAutoConfirmJob autoConfirm;
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
@@ -443,6 +444,42 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         assertThat(done.delivery()).isEqualTo(PurchaseOrder.Delivery.DELIVERED);
         assertThat(done.state()).isEqualTo(CONFIRMED);
         assertThat(HTTP.compensationCalls.get()).isZero();
+    }
+
+    @Test
+    void buyerConfirmsPurchaseOnlyAfterDeliveryAndOnce() {
+        var o = paid();
+        assertThatThrownBy(() -> commands.confirmPurchase(buyer, o.orderId()))
+                .isInstanceOf(OrderException.class);
+        var shipped =
+                commands.shipment(
+                        HTTP.seller,
+                        o.orderId(),
+                        new OrderRequests.Shipment("테스트 택배", "TEST-1", o.version()));
+        commands.deliver(HTTP.seller, o.orderId(), new OrderRequests.Delivery(shipped.version()));
+        assertThatThrownBy(() -> commands.confirmPurchase(UUID.randomUUID(), o.orderId()))
+                .isInstanceOf(OrderException.class);
+        var confirmed = commands.confirmPurchase(buyer, o.orderId());
+        assertThat(confirmed.purchaseConfirmedAt()).isNotNull();
+        var again = commands.confirmPurchase(buyer, o.orderId());
+        assertThat(again.purchaseConfirmedAt()).isEqualTo(confirmed.purchaseConfirmedAt());
+    }
+
+    @Test
+    void deliveredOrderIsAutoConfirmedOnlyAfterSevenDays() {
+        var o = paid();
+        var shipped =
+                commands.shipment(
+                        HTTP.seller,
+                        o.orderId(),
+                        new OrderRequests.Shipment("테스트 택배", "TEST-2", o.version()));
+        commands.deliver(HTTP.seller, o.orderId(), new OrderRequests.Delivery(shipped.version()));
+        clock.set(clock.instant().plus(java.time.Duration.ofDays(6)));
+        autoConfirm.run();
+        assertThat(queries.buyer(buyer, o.orderId()).purchaseConfirmedAt()).isNull();
+        clock.set(clock.instant().plus(java.time.Duration.ofDays(2)));
+        autoConfirm.run();
+        assertThat(queries.buyer(buyer, o.orderId()).purchaseConfirmedAt()).isNotNull();
     }
 
     @Test

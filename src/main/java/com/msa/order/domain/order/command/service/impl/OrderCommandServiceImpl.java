@@ -76,6 +76,11 @@ public class OrderCommandServiceImpl implements OrderCommandService {
         return queries.seller(seller, id);
     }
 
+    public CheckoutResponse confirmPurchase(UUID buyer, UUID id) {
+        store.confirmPurchase(buyer, id);
+        return queries.buyer(buyer, id);
+    }
+
     private String hash(OrderRequests.Create r) {
         String value =
                 r.productId()

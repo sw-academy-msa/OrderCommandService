@@ -17,4 +17,6 @@ public interface OrderCommandService {
     CheckoutResponse shipment(UUID seller, UUID order, OrderRequests.Shipment request);
 
     CheckoutResponse deliver(UUID seller, UUID order, OrderRequests.Delivery request);
+
+    CheckoutResponse confirmPurchase(UUID buyer, UUID order);
 }

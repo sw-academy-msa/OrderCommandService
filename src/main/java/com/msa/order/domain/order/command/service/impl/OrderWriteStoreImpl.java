@@ -154,6 +154,32 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         journal.changed(o, "DELIVERY_MANUALLY_COMPLETED", seller);
     }
 
+    public void confirmPurchase(UUID buyer, UUID id) {
+        var o = owned(id, buyer, false);
+        if (o.purchaseConfirmedAt != null) {
+            return;
+        }
+        if (o.state != CONFIRMED || o.delivery != PurchaseOrder.Delivery.DELIVERED) {
+            fail(OrderErrorCode.STATE);
+        }
+        o.purchaseConfirmedAt = clock.instant();
+        journal.changed(o, "PURCHASE_CONFIRMED", buyer);
+    }
+
+    public void autoConfirmPurchase(UUID id, java.time.Instant before) {
+        var o = orders.lock(id).orElse(null);
+        if (o == null
+                || o.purchaseConfirmedAt != null
+                || o.state != CONFIRMED
+                || o.delivery != PurchaseOrder.Delivery.DELIVERED
+                || o.deliveredAt == null
+                || !o.deliveredAt.isBefore(before)) {
+            return;
+        }
+        o.purchaseConfirmedAt = clock.instant();
+        journal.changed(o, "PURCHASE_AUTO_CONFIRMED", null);
+    }
+
     private PurchaseOrder owned(UUID id, UUID actor, boolean seller) {
         var o = orders.lock(id).orElseThrow(() -> new OrderException(OrderErrorCode.NOT_FOUND));
         if (!actor.equals(seller ? o.sellerId : o.buyerId)) {
