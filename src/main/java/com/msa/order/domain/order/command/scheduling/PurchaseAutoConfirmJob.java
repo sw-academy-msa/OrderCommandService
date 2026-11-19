@@ -37,13 +37,23 @@ public class PurchaseAutoConfirmJob {
             scheduler = "purchaseConfirmScheduler")
     public void run() {
         var before = clock.instant().minus(AFTER_DELIVERY);
-        for (var id : orders.autoConfirmIds(before, PageRequest.of(0, 100))) {
-            try {
-                store.autoConfirmPurchase(id, before);
-            } catch (RuntimeException ex) {
-                org.slf4j.LoggerFactory.getLogger(getClass())
-                        .warn("자동 구매 확정 재시도 예정: type={}", ex.getClass().getSimpleName());
+        // 커서로 끝까지 훑는다. 실패한 주문은 건너뛰고 다음 실행에서 다시 시도한다
+        Instant afterAt = Instant.EPOCH;
+        java.util.UUID afterId = new java.util.UUID(0, 0);
+        for (int round = 0; round < 1000; round++) {
+            var page = orders.autoConfirmCandidates(before, afterAt, afterId, PageRequest.of(0, 100));
+            for (var row : page) {
+                var id = (java.util.UUID) row[0];
+                try {
+                    store.autoConfirmPurchase(id, before);
+                } catch (RuntimeException ex) {
+                    org.slf4j.LoggerFactory.getLogger(getClass())
+                            .warn("자동 구매 확정 재시도 예정: type={}", ex.getClass().getSimpleName());
+                }
+                afterAt = (Instant) row[1];
+                afterId = id;
             }
+            if (page.size() < 100) break;
         }
     }
 }
