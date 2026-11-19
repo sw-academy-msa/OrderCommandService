@@ -23,6 +23,11 @@ public class SchedulingConfig {
         return scheduler("inquiry-cleanup-", 1);
     }
 
+    @Bean
+    public ThreadPoolTaskScheduler purchaseConfirmScheduler() {
+        return scheduler("purchase-confirm-", 1);
+    }
+
     private ThreadPoolTaskScheduler scheduler(String prefix, int size) {
         var s = new ThreadPoolTaskScheduler();
         s.setPoolSize(size);

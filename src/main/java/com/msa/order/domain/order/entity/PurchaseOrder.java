@@ -127,6 +127,9 @@ public class PurchaseOrder {
 
     public Instant shippedAt;
     public Instant deliveredAt;
+
+    /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동). null이면 확정 전 */
+    public Instant purchaseConfirmedAt;
     // 분산 작업 임대는 HTTP 동안 DB 잠금을 점유하지 않습니다. 재시작 후 만료된 임대를 다시 획득합니다.
     public UUID leaseToken;
     public Instant leaseUntil;

@@ -76,6 +76,14 @@ public class OrderCommandController {
         return response(() -> commands.payment(UUID.fromString(jwt.getSubject()), id, r), true);
     }
 
+    /** 구매 확정(배송 완료 주문). 이미 확정했으면 현재 상태를 그대로 돌려줍니다 */
+    @PostMapping("/{id}/purchase-confirmation")
+    public ResponseEntity<ApiResponse<CheckoutResponse>> confirmPurchase(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return response(
+                () -> commands.confirmPurchase(UUID.fromString(jwt.getSubject()), id), false);
+    }
+
     /** 보안 설정의 roles 변환기가 부여한 권한으로 판단합니다. 원본 클레임을 따로 해석하지 않아 형식이 달라도 판단이 어긋나지 않습니다. */
     private boolean isAdmin(Authentication authentication) {
         return authentication != null

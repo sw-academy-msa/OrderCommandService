@@ -13,7 +13,7 @@ class CheckoutTermsMigrationTest {
         try (var db = new PostgreSQLContainer("postgres:17-alpine")) {
             db.start();
             var migration = flyway(db).createSchemas(true).load();
-            assertThat(migration.migrate().migrationsExecuted).isEqualTo(3);
+            assertThat(migration.migrate().migrationsExecuted).isEqualTo(4);
             assertThat(migration.migrate().migrationsExecuted).isZero();
             try (var connection =
                             java.sql.DriverManager.getConnection(
@@ -38,7 +38,9 @@ class CheckoutTermsMigrationTest {
                 sql.execute("create schema orders");
                 sql.execute("create table orders.existing_business_row(id integer primary key)");
                 sql.execute("insert into orders.existing_business_row values (7)");
-                var migration = flyway(db).baselineOnMigrate(true).baselineVersion("3").load();
+                // 기준점 처리만 검증한다(V4 이후는 실제 업무 테이블이 있어야 하므로 V3까지만)
+                var migration =
+                        flyway(db).baselineOnMigrate(true).baselineVersion("3").target("3").load();
                 assertThat(migration.migrate().migrationsExecuted).isZero();
                 assertThat(migration.info().current().getVersion().getVersion()).isEqualTo("3");
                 try (var row = sql.executeQuery("select id from orders.existing_business_row")) {
