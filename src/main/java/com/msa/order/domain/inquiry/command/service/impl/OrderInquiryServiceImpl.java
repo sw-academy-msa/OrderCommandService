@@ -11,6 +11,7 @@ import com.msa.order.domain.inquiry.repository.OrderInquiryRepository;
 import com.msa.order.domain.order.entity.PurchaseOrder;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.domain.outbox.entity.OutboxEvent;
+import com.msa.order.domain.notification.service.BusinessNoticeService;
 
 import jakarta.persistence.EntityManager;
 
@@ -34,6 +35,7 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
     private final EntityManager em;
     private final JsonMapper json;
     private final Clock clock;
+    private final BusinessNoticeService notices;
 
     public OrderInquiryServiceImpl(
             OrderRepository orders,
@@ -41,13 +43,15 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
             InquiryImageRepository images,
             EntityManager em,
             JsonMapper json,
-            Clock clock) {
+            Clock clock,
+            BusinessNoticeService notices) {
         this.orders = orders;
         this.inquiries = inquiries;
         this.images = images;
         this.em = em;
         this.json = json;
         this.clock = clock;
+        this.notices = notices;
     }
 
     public InquiryResponse create(UUID buyer, UUID order, InquiryRequests.Create r) {
@@ -112,6 +116,7 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
                             image.inquiryId = id;
                         });
         emit(i);
+        notifyCounterparty(i, false);
         return response(i);
     }
 
@@ -135,6 +140,7 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
                         .build());
         inquiries.flush();
         emit(i);
+        notifyCounterparty(i, seller);
         return response(i);
     }
 
@@ -151,6 +157,18 @@ public class OrderInquiryServiceImpl implements OrderInquiryService {
             fail(InquiryErrorCode.OWNER);
         }
         return o;
+    }
+
+    /** requestKey 중복의 조기 반환을 통과한 신규 메시지만 문의 ID와 메시지 수로 기록합니다. */
+    private void notifyCounterparty(OrderInquiry inquiry, boolean seller) {
+        // 본인 문의와 판매자 스냅샷이 없는 과거 데이터에는 수신자를 추정하지 않습니다.
+        UUID recipient = seller ? inquiry.buyerId : inquiry.sellerId;
+        UUID actor = seller ? inquiry.sellerId : inquiry.buyerId;
+        if (recipient == null || recipient.equals(actor)) return;
+        notices.enqueue(recipient, seller ? "ORDER_INQUIRY_ANSWERED" : "ORDER_INQUIRY_CREATED",
+                inquiry.id, inquiry.messages.size(),
+                seller ? "ORDER_INQUIRY" : "SELLER_ORDER_INQUIRY",
+                inquiry.id, inquiry.orderId, null);
     }
 
     private OrderInquiry inquiry(UUID order, UUID id) {
