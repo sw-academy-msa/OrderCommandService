@@ -2,6 +2,13 @@
 
 ## 범위와 수신자
 
+주문 문의 생성 및 구매자 추가 메시지마다 ORDER_INQUIRY_CREATED / SELLER_ORDER_INQUIRY를 판매자에게,
+판매자 답변 메시지마다 ORDER_INQUIRY_ANSWERED / ORDER_INQUIRY를 구매자에게 발행합니다.
+aggregateId와 targetId는 문의 ID, relatedId는 주문 ID, aggregateVersion은 문의 메시지 수입니다.
+같은 requestKey 재시도는 기존 결과를 반환하고 알림을 추가하지 않습니다. 본인 문의도 알림을 생략합니다.
+새 requestKey 메시지는 같은 문장이라도 새 메시지입니다. 주문 잠금 아래 문의와 업무 Outbox를 함께 커밋합니다.
+문의 원문은 이벤트에 포함하지 않으며 수신 정책 및 FE 배포가 선행되어야 합니다. DB 변경은 없습니다.
+
 | 원본 | notificationType | 수신자 | targetType |
 |---|---|---|---|
 | Account | SELLER_APPROVED, SELLER_REJECTED | 판매자 신청자, 재심사 포함 | SELLER_APPLICATION |
