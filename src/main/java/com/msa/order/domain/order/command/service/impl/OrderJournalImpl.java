@@ -57,6 +57,12 @@ public class OrderJournalImpl implements OrderJournal {
         snapshot.put("address", o.address);
         snapshot.put("unitPrice", o.unitPrice);
         snapshot.put("shippingFee", o.shippingFee);
+        // 과거 주문의 스냅샷 형식은 유지하고 새 가격이 확정된 주문에만 추가합니다.
+        if (o.originalShippingFee != null) {
+            snapshot.put("originalShippingFee", o.originalShippingFee);
+            snapshot.put("membershipShippingDiscount", o.membershipShippingDiscount);
+            snapshot.put("effectiveShippingFee", o.effectiveShippingFee());
+        }
         snapshot.put("totalAmount", o.totalAmount);
         snapshot.put("dispatchBusinessDays", o.dispatchBusinessDays);
         snapshot.put("expiresAt", o.expiresAt);

@@ -23,6 +23,9 @@ public record CheckoutResponse(
         ShippingAddressResponse address,
         Long unitPrice,
         Long shippingFee,
+        Long originalShippingFee,
+        Long membershipShippingDiscount,
+        Long effectiveShippingFee,
         Long totalAmount,
         Integer dispatchBusinessDays,
         Instant expiresAt,
@@ -118,6 +121,11 @@ public record CheckoutResponse(
                 .address(ShippingAddressResponse.from(o.address))
                 .unitPrice(o.unitPrice)
                 .shippingFee(o.shippingFee)
+                .originalShippingFee(
+                        o.originalShippingFee == null ? o.shippingFee : o.originalShippingFee)
+                .membershipShippingDiscount(
+                        o.membershipShippingDiscount == null ? 0L : o.membershipShippingDiscount)
+                .effectiveShippingFee(o.effectiveShippingFee())
                 .totalAmount(o.totalAmount)
                 .dispatchBusinessDays(o.dispatchBusinessDays)
                 .expiresAt(o.expiresAt)

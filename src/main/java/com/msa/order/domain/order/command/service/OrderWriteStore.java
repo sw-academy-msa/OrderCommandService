@@ -1,6 +1,7 @@
 package com.msa.order.domain.order.command.service;
 
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.entity.ShippingAddress;
 
 import java.util.UUID;
@@ -10,6 +11,13 @@ public interface OrderWriteStore {
     UUID existing(UUID buyer, UUID requestKey, String hash);
 
     UUID create(UUID buyer, OrderRequests.Create request, String hash, ShippingAddress address);
+
+    UUID create(
+            UUID buyer,
+            OrderRequests.Create request,
+            String hash,
+            ShippingAddress address,
+            MembershipBenefit membership);
 
     void address(UUID buyer, UUID id, OrderRequests.Address request, ShippingAddress address);
 

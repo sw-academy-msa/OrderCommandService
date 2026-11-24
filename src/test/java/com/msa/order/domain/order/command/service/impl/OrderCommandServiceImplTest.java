@@ -13,6 +13,7 @@ import com.msa.order.domain.inquiry.exception.InquiryException;
 import com.msa.order.domain.order.client.HttpDependencyFixtures;
 import com.msa.order.domain.order.client.dto.response.PaymentReply;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
 import com.msa.order.domain.order.exception.OrderException;
@@ -42,7 +43,11 @@ import java.util.concurrent.*;
 
 /** 실제 PostgreSQL·HTTP로 주문 멱등/영속 Saga/소유권을 검증합니다. 토스 실제 승인 테스트가 아닙니다. */
 @SpringBootTest(
-        properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
+        properties = {
+            "springdoc.api-docs.enabled=true",
+            "springdoc.swagger-ui.enabled=true",
+            "membership.shipping.enabled=true"
+        })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 @Import(OrderDatabaseTestSupport.Time.class)
@@ -56,7 +61,9 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         }
         // Eureka 대신 Spring Cloud 단순 탐색에 fixture를 등록해 운영과 같은 LoadBalancer 선택 경로를 탑니다.
         for (String service : List.of("product-command-service", "account-service")) {
-            r.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri", HTTP::url);
+            r.add(
+                    "spring.cloud.discovery.client.simple.instances." + service + "[0].uri",
+                    HTTP::url);
         }
         r.add("order.clients.product.token", () -> "fixture-product-token");
         r.add("order.clients.payment.token", () -> "fixture-payment-token");
@@ -71,6 +78,8 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     @Autowired OrderWriteStore writeStore;
     @Autowired OrderInquiryService inquiries;
     @Autowired MutableClock clock;
+
+
     @Autowired com.msa.order.domain.order.command.scheduling.PurchaseAutoConfirmJob autoConfirm;
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
@@ -84,6 +93,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
 
     @BeforeEach
     void setup() {
+
         clock.set(Instant.parse("2030-01-01T00:00:00Z"));
         HTTP.reset(clock);
         jdbc.update("delete from orders.payment_result_receipts");
@@ -98,6 +108,24 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         product = UUID.randomUUID();
         option = UUID.randomUUID();
         address = UUID.randomUUID();
+    }
+
+    @Test
+    void memberPriceAndQualificationAreFixedOnFirstRequest() {
+
+        var request = request();
+        var member = new MembershipBenefit(true, clock.instant().plusSeconds(60), 7);
+        var first = commands.create(buyer, request, "fixture-buyer-token", member);
+        assertThat(first.shippingFee()).isEqualTo(3000L);
+        assertThat(first.originalShippingFee()).isEqualTo(3000L);
+        assertThat(first.membershipShippingDiscount()).isEqualTo(3000L);
+        assertThat(first.effectiveShippingFee()).isZero();
+        assertThat(first.totalAmount()).isEqualTo(first.unitPrice() * 3);
+
+        var replay = commands.create(buyer, request, "fixture-buyer-token");
+        assertThat(replay.totalAmount()).isEqualTo(first.totalAmount());
+        assertThat(orders.findById(first.orderId()).orElseThrow().membershipSourceVersion)
+                .isEqualTo(7L);
     }
 
     OrderRequests.Create request() {

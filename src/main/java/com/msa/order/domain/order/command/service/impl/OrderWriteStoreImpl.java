@@ -3,11 +3,13 @@ package com.msa.order.domain.order.command.service.impl;
 import static com.msa.order.domain.order.entity.PurchaseOrder.State.*;
 
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
 import com.msa.order.domain.order.exception.OrderErrorCode;
 import com.msa.order.domain.order.exception.OrderException;
 import com.msa.order.domain.order.repository.OrderRepository;
+import com.msa.order.global.config.membership.MembershipShippingProperties;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +26,16 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     private final OrderJournal journal;
     private final Clock clock;
     private final com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal;
+    private final MembershipShippingProperties membershipShipping;
 
     public OrderWriteStoreImpl(
             com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal,
             OrderRepository orders,
             OrderJournal journal,
             Clock clock,
-            com.msa.order.domain.terms.query.service.CheckoutTermsService terms) {
+            com.msa.order.domain.terms.query.service.CheckoutTermsService terms,
+            MembershipShippingProperties membershipShipping) {
+        this.membershipShipping = membershipShipping;
         this.withdrawal = withdrawal;
         this.orders = orders;
         this.journal = journal;
@@ -50,6 +55,15 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     }
 
     public UUID create(UUID buyer, OrderRequests.Create r, String hash, ShippingAddress address) {
+        return create(buyer, r, hash, address, MembershipBenefit.none());
+    }
+
+    public UUID create(
+            UUID buyer,
+            OrderRequests.Create r,
+            String hash,
+            ShippingAddress address,
+            MembershipBenefit membership) {
         withdrawal.requireOpen(buyer);
         orders.lockRequestCreation(buyer + ":" + r.requestKey());
         UUID old = existing(buyer, r.requestKey(), hash);
@@ -74,6 +88,18 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
                                                 .quantity(i.quantity())
                                                 .build()));
         o.address = address;
+        // 같은 요청 키는 기존 주문을 먼저 반환하여 자격과 금액을 다시 평가하지 않습니다.
+        o.membershipEvaluatedAt = clock.instant();
+        o.membershipEligible =
+                membershipShipping.enabled()
+                        && membership.active()
+                        && o.membershipEvaluatedAt.isBefore(membership.validUntil());
+        o.membershipEntitlementUntil = membership.validUntil();
+        o.membershipSourceVersion = membership.version();
+        o.shippingPolicyVersion = membershipShipping.policyVersion();
+        o.membershipRateBps =
+                "RATE".equals(membershipShipping.mode()) ? membershipShipping.rateBps() : null;
+        o.membershipAmount = membershipShipping.amount();
         orders.saveAndFlush(o);
         journal.changed(o, "ORDER_CREATED", buyer);
         return o.id;
