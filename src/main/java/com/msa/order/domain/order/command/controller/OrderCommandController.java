@@ -2,6 +2,7 @@ package com.msa.order.domain.order.command.controller;
 
 import com.msa.order.domain.order.client.RemoteFailure;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.command.service.OrderCommandService;
 import com.msa.order.domain.order.exception.OrderErrorCode;
 import com.msa.order.domain.order.exception.OrderException;
@@ -45,7 +46,12 @@ public class OrderCommandController {
             throw new OrderException(OrderErrorCode.FORBIDDEN);
         }
         return response(
-                () -> commands.create(UUID.fromString(jwt.getSubject()), r, jwt.getTokenValue()),
+                () ->
+                        commands.create(
+                                UUID.fromString(jwt.getSubject()),
+                                r,
+                                jwt.getTokenValue(),
+                                MembershipBenefit.from(jwt.getClaims().get("membership"))),
                 true);
     }
 

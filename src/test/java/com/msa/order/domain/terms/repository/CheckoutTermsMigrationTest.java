@@ -13,7 +13,7 @@ class CheckoutTermsMigrationTest {
         try (var db = new PostgreSQLContainer("postgres:17-alpine")) {
             db.start();
             var migration = flyway(db).createSchemas(true).load();
-            assertThat(migration.migrate().migrationsExecuted).isEqualTo(4);
+            assertThat(migration.migrate().migrationsExecuted).isEqualTo(5);
             assertThat(migration.migrate().migrationsExecuted).isZero();
             try (var connection =
                             java.sql.DriverManager.getConnection(

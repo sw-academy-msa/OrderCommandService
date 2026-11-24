@@ -79,11 +79,14 @@ public class SagaStoreImpl implements SagaStore {
             o.dispatchBusinessDays = r.dispatchBusinessDays();
             o.unitPrice = r.unitPrice();
             o.shippingFee = r.shippingFee();
+            o.originalShippingFee = r.shippingFee();
+            o.membershipShippingDiscount = o.membershipDiscount(r.shippingFee());
             o.expiresAt = r.expiresAt();
             long count = o.items.stream().mapToLong(i -> i.quantity).sum();
             try {
                 o.totalAmount =
-                        Math.addExact(Math.multiplyExact(o.unitPrice, count), o.shippingFee);
+                        Math.addExact(
+                                Math.multiplyExact(o.unitPrice, count), o.effectiveShippingFee());
             } catch (ArithmeticException overflow) {
                 // 유효한 원본이라도 합계가 표현 범위를 넘으면 결제를 시작하지 않고 확보를 해제합니다.
                 o.totalAmount = null;
