@@ -56,3 +56,5 @@ Lombok은 Spring Boot가 관리하는 버전을 compileOnly·annotationProcessor
 
 [심사 결과, 보완 요청과 기한, 주문 확정과 배송 알림 계약](contracts/business-notifications-v1.md)을 확인합니다.
 상태 변경과 Outbox는 함께 커밋하며 기존 구매 Saga와 결제 Kafka 계약은 유지합니다.
+
+쿠폰 연동은 [상세 문서](docs/coupon-integration.md)를 따릅니다.

@@ -107,6 +107,18 @@ public class PurchaseOrder {
     public Integer membershipRateBps;
     public Long membershipAmount;
     public Long totalAmount;
+    public Long itemsAmount;
+    public UUID couponIssueId;
+    public String couponState;
+    public String couponRejectCode;
+    public int couponLockAttempts;
+    public String couponDiscountType;
+    public Long couponAmount;
+    public Integer couponRateBps;
+    public Long couponMaxDiscount;
+    public Long couponMinItemsAmount;
+    public Long couponDefinitionVersion;
+    public Long couponDiscount;
 
     @Column(unique = true)
     public UUID paymentAttemptId;

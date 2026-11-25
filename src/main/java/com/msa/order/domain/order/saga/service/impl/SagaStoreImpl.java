@@ -61,6 +61,9 @@ public class SagaStoreImpl implements SagaStore {
                 .paymentAttemptId(o.paymentAttemptId)
                 .totalAmount(o.totalAmount)
                 .paymentKey(o.paymentKey)
+                .couponIssueId(o.couponIssueId)
+                .couponState(o.couponState)
+                .couponLockAttempts(o.couponLockAttempts)
                 .approvedAt(o.paymentApprovedAt)
                 .build();
     }
@@ -83,10 +86,24 @@ public class SagaStoreImpl implements SagaStore {
             o.membershipShippingDiscount = o.membershipDiscount(r.shippingFee());
             o.expiresAt = r.expiresAt();
             long count = o.items.stream().mapToLong(i -> i.quantity).sum();
+            var coupon = outcome.coupon();
+            o.couponDiscount = 0L;
+            if (coupon != null) {
+                o.couponState = coupon.state();
+                o.couponRejectCode = coupon.rejectCode();
+                o.couponDiscountType = coupon.discountType();
+                o.couponAmount = coupon.amount();
+                o.couponRateBps = coupon.rateBps();
+                o.couponMaxDiscount = coupon.maxDiscount();
+                o.couponMinItemsAmount = coupon.minItemsAmount();
+                o.couponDefinitionVersion = coupon.definitionVersion();
+            }
             try {
+                o.itemsAmount = Math.multiplyExact(o.unitPrice, count);
+                // 상품 최소 100원을 남긴 뒤 원 배송비와 회원 지원을 합산합니다.
+                o.couponDiscount = coupon == null ? 0L : coupon.discount(o.itemsAmount);
                 o.totalAmount =
-                        Math.addExact(
-                                Math.multiplyExact(o.unitPrice, count), o.effectiveShippingFee());
+                        Math.addExact(o.itemsAmount - o.couponDiscount, o.effectiveShippingFee());
             } catch (ArithmeticException overflow) {
                 // 유효한 원본이라도 합계가 표현 범위를 넘으면 결제를 시작하지 않고 확보를 해제합니다.
                 o.totalAmount = null;
@@ -123,6 +140,9 @@ public class SagaStoreImpl implements SagaStore {
         // 결과 미도착 시 승인 명령을 중복 생성하지 않고 로컬 결과와 Kafka CHECK로 복구합니다.
         if (o.state == APPROVING_PAYMENT) {
             o.state = VERIFYING_PAYMENT;
+        }
+        if (o.state == RESERVING && "COUPON_UNAVAILABLE".equals(failure)) {
+            o.couponLockAttempts++;
         }
         o.lastFailureCode = failure;
         o.leaseToken = null;

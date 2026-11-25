@@ -93,6 +93,8 @@ public class OrderCommandServiceImpl implements OrderCommandService {
                         + ":"
                         + r.addressId()
                         + ":"
+                        + r.couponIssueId()
+                        + ":"
                         + r.items().stream()
                                 .sorted(Comparator.comparing(OrderRequests.Item::optionId))
                                 .map(i -> i.optionId() + "=" + i.quantity())

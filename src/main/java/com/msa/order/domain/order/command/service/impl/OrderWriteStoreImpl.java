@@ -8,9 +8,11 @@ import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
 import com.msa.order.domain.order.exception.OrderErrorCode;
 import com.msa.order.domain.order.exception.OrderException;
+import com.msa.order.domain.order.repository.OrderAnalyticsContextRepository;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.global.config.membership.MembershipShippingProperties;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,8 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     private final Clock clock;
     private final com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal;
     private final MembershipShippingProperties membershipShipping;
+    private final OrderAnalyticsContextRepository analytics;
+    private final boolean analyticsEnabled;
 
     public OrderWriteStoreImpl(
             com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal,
@@ -34,7 +38,11 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
             OrderJournal journal,
             Clock clock,
             com.msa.order.domain.terms.query.service.CheckoutTermsService terms,
-            MembershipShippingProperties membershipShipping) {
+            MembershipShippingProperties membershipShipping,
+            OrderAnalyticsContextRepository analytics,
+            @Value("${ORDER_ANALYTICS_ENABLED:false}") boolean analyticsEnabled) {
+        this.analytics = analytics;
+        this.analyticsEnabled = analyticsEnabled;
         this.membershipShipping = membershipShipping;
         this.withdrawal = withdrawal;
         this.orders = orders;
@@ -88,6 +96,8 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
                                                 .quantity(i.quantity())
                                                 .build()));
         o.address = address;
+        o.couponIssueId = r.couponIssueId();
+        o.couponState = r.couponIssueId() == null ? "NONE" : "REQUESTED";
         // 같은 요청 키는 기존 주문을 먼저 반환하여 자격과 금액을 다시 평가하지 않습니다.
         o.membershipEvaluatedAt = clock.instant();
         o.membershipEligible =
@@ -135,6 +145,16 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
                 || !r.agreed()
                 || o.totalAmount == null) {
             fail(OrderErrorCode.STATE);
+        }
+        if (analyticsEnabled && r.analytics() != null) {
+            analytics.save(
+                    OrderAnalyticsContext.builder()
+                            .orderId(o.id)
+                            .analyticsId(r.analytics().analyticsId())
+                            .clientId(r.analytics().clientId())
+                            .sessionId(r.analytics().sessionId())
+                            .createdAt(clock.instant())
+                            .build());
         }
         o.paymentAttemptId = r.requestKey();
         o.paymentKey = r.paymentKey();
