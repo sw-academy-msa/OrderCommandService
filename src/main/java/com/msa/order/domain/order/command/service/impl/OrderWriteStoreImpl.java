@@ -146,7 +146,8 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
                 || o.totalAmount == null) {
             fail(OrderErrorCode.STATE);
         }
-        if (analyticsEnabled && r.analytics() != null) {
+        // 과거 HELD 주문은 상품 금액 스냅샷이 없으므로 분석보다 결제 호환을 우선합니다.
+        if (analyticsEnabled && r.analytics() != null && o.itemsAmount != null) {
             analytics.save(
                     OrderAnalyticsContext.builder()
                             .orderId(o.id)

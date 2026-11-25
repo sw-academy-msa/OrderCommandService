@@ -115,6 +115,48 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     }
 
     @Test
+    void legacyNoCouponRequestHashAndHeldPaymentRemainCompatible() throws Exception {
+        var r = request();
+        var held = commands.create(buyer, r, "fixture-buyer-token");
+        String legacy =
+                r.productId()
+                        + ":"
+                        + r.addressId()
+                        + ":"
+                        + r.items().stream()
+                                .sorted(Comparator.comparing(OrderRequests.Item::optionId))
+                                .map(i -> i.optionId() + "=" + i.quantity())
+                                .toList();
+        String hash =
+                HexFormat.of()
+                        .formatHex(
+                                java.security.MessageDigest.getInstance("SHA-256")
+                                        .digest(
+                                                legacy.getBytes(
+                                                        java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(orders.findById(held.orderId()).orElseThrow().requestHash).isEqualTo(hash);
+        assertThat(commands.create(buyer, r, "fixture-buyer-token").orderId())
+                .isEqualTo(held.orderId());
+        tx.executeWithoutResult(s -> orders.lock(held.orderId()).orElseThrow().itemsAmount = null);
+        commands.payment(
+                buyer,
+                held.orderId(),
+                new OrderRequests.Payment(
+                        UUID.randomUUID(),
+                        "fixture-payment-key",
+                        true,
+                        "checkout-v1",
+                        new OrderRequests.Analytics(UUID.randomUUID(), "123.456", "123")));
+        var command =
+                jdbc.queryForObject(
+                        "select payload from orders.outbox_events where"
+                            + " topic='stockdrop.payment.commands.private.v1' and"
+                            + " payload::jsonb->>'action'='APPROVE'",
+                        String.class);
+        assertThat(command).doesNotContain("analytics");
+    }
+
+    @Test
     void couponFollowsReservationAndMembershipDiscountAndLifecyclePreservesSnapshot() {
         var original = request();
         var request =

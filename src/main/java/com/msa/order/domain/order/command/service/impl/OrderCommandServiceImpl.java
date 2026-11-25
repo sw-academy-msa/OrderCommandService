@@ -92,8 +92,7 @@ public class OrderCommandServiceImpl implements OrderCommandService {
                 r.productId()
                         + ":"
                         + r.addressId()
-                        + ":"
-                        + r.couponIssueId()
+                        + (r.couponIssueId() == null ? "" : ":" + r.couponIssueId())
                         + ":"
                         + r.items().stream()
                                 .sorted(Comparator.comparing(OrderRequests.Item::optionId))
