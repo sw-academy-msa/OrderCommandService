@@ -186,6 +186,14 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         assertThat(lifecycle)
                 .contains("\"couponApplied\":true")
                 .doesNotContain("address", "paymentKey");
+        assertThat(
+                        jdbc.queryForList(
+                                "select distinct partition_key from orders.outbox_events where"
+                                        + " topic='stockdrop.orders.lifecycle.v1' and"
+                                        + " payload::jsonb->>'buyerId'=?",
+                                String.class,
+                                buyer.toString()))
+                .containsExactly(buyer.toString());
         assertThatThrownBy(
                         () ->
                                 commands.create(
