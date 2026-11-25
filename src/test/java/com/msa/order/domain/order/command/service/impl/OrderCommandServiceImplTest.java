@@ -13,6 +13,7 @@ import com.msa.order.domain.inquiry.exception.InquiryException;
 import com.msa.order.domain.order.client.HttpDependencyFixtures;
 import com.msa.order.domain.order.client.dto.response.PaymentReply;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.entity.*;
 import com.msa.order.domain.order.exception.OrderException;
@@ -42,7 +43,14 @@ import java.util.concurrent.*;
 
 /** 실제 PostgreSQL·HTTP로 주문 멱등/영속 Saga/소유권을 검증합니다. 토스 실제 승인 테스트가 아닙니다. */
 @SpringBootTest(
-        properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
+        properties = {
+            "springdoc.api-docs.enabled=true",
+            "springdoc.swagger-ui.enabled=true",
+            "membership.shipping.enabled=true",
+            "order.coupon.enabled=true",
+            "order.lifecycle.enabled=true",
+            "ORDER_ANALYTICS_ENABLED=true"
+        })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 @Import(OrderDatabaseTestSupport.Time.class)
@@ -51,13 +59,17 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
 
     @DynamicPropertySource
     static void clients(DynamicPropertyRegistry r) {
-        for (String name : List.of("product", "payment", "account")) {
+        for (String name : List.of("product", "payment", "account", "coupon")) {
             r.add("order.clients." + name + ".enabled", () -> "true");
         }
         // Eureka 대신 Spring Cloud 단순 탐색에 fixture를 등록해 운영과 같은 LoadBalancer 선택 경로를 탑니다.
-        for (String service : List.of("product-command-service", "account-service")) {
-            r.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri", HTTP::url);
+        for (String service :
+                List.of("product-command-service", "account-service", "coupon-service")) {
+            r.add(
+                    "spring.cloud.discovery.client.simple.instances." + service + "[0].uri",
+                    HTTP::url);
         }
+        r.add("order.clients.coupon.token", () -> "fixture-coupon-token");
         r.add("order.clients.product.token", () -> "fixture-product-token");
         r.add("order.clients.payment.token", () -> "fixture-payment-token");
     }
@@ -71,6 +83,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     @Autowired OrderWriteStore writeStore;
     @Autowired OrderInquiryService inquiries;
     @Autowired MutableClock clock;
+
     @Autowired com.msa.order.domain.order.command.scheduling.PurchaseAutoConfirmJob autoConfirm;
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
@@ -84,6 +97,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
 
     @BeforeEach
     void setup() {
+
         clock.set(Instant.parse("2030-01-01T00:00:00Z"));
         HTTP.reset(clock);
         jdbc.update("delete from orders.payment_result_receipts");
@@ -98,6 +112,171 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         product = UUID.randomUUID();
         option = UUID.randomUUID();
         address = UUID.randomUUID();
+    }
+
+    @Test
+    void legacyNoCouponRequestHashAndHeldPaymentRemainCompatible() throws Exception {
+        var r = request();
+        var held = commands.create(buyer, r, "fixture-buyer-token");
+        String legacy =
+                r.productId()
+                        + ":"
+                        + r.addressId()
+                        + ":"
+                        + r.items().stream()
+                                .sorted(Comparator.comparing(OrderRequests.Item::optionId))
+                                .map(i -> i.optionId() + "=" + i.quantity())
+                                .toList();
+        String hash =
+                HexFormat.of()
+                        .formatHex(
+                                java.security.MessageDigest.getInstance("SHA-256")
+                                        .digest(
+                                                legacy.getBytes(
+                                                        java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(orders.findById(held.orderId()).orElseThrow().requestHash).isEqualTo(hash);
+        assertThat(commands.create(buyer, r, "fixture-buyer-token").orderId())
+                .isEqualTo(held.orderId());
+        tx.executeWithoutResult(s -> orders.lock(held.orderId()).orElseThrow().itemsAmount = null);
+        commands.payment(
+                buyer,
+                held.orderId(),
+                new OrderRequests.Payment(
+                        UUID.randomUUID(),
+                        "fixture-payment-key",
+                        true,
+                        "checkout-v1",
+                        new OrderRequests.Analytics(UUID.randomUUID(), "123.456", "123")));
+        var command =
+                jdbc.queryForObject(
+                        "select payload from orders.outbox_events where"
+                            + " topic='stockdrop.payment.commands.private.v1' and"
+                            + " payload::jsonb->>'action'='APPROVE'",
+                        String.class);
+        assertThat(command).doesNotContain("analytics");
+    }
+
+    @Test
+    void couponFollowsReservationAndMembershipDiscountAndLifecyclePreservesSnapshot() {
+        var original = request();
+        var request =
+                new OrderRequests.Create(
+                        original.requestKey(),
+                        original.productId(),
+                        original.items(),
+                        original.addressId(),
+                        UUID.randomUUID());
+        var held =
+                commands.create(
+                        buyer,
+                        request,
+                        "fixture-buyer-token",
+                        new MembershipBenefit(true, clock.instant().plusSeconds(600), 1));
+        assertThat(held.state()).isEqualTo(HELD);
+        assertThat(held.couponState()).isEqualTo("LOCKED");
+        assertThat(held.itemsAmount()).isEqualTo(held.unitPrice() * 3);
+        assertThat(held.totalAmount()).isEqualTo(Math.max(100, held.itemsAmount() - 3000));
+        assertThat(HTTP.couponCalls.get()).isEqualTo(1);
+        var lifecycle =
+                jdbc.queryForObject(
+                        "select payload from orders.outbox_events where"
+                                + " topic='stockdrop.orders.lifecycle.v1' and"
+                                + " payload::jsonb->>'phase'='HELD'",
+                        String.class);
+        assertThat(lifecycle)
+                .contains("\"couponApplied\":true")
+                .doesNotContain("address", "paymentKey");
+        assertThat(
+                        jdbc.queryForList(
+                                "select distinct partition_key from orders.outbox_events where"
+                                        + " topic='stockdrop.orders.lifecycle.v1' and"
+                                        + " payload::jsonb->>'buyerId'=?",
+                                String.class,
+                                buyer.toString()))
+                .containsExactly(buyer.toString());
+        assertThatThrownBy(
+                        () ->
+                                commands.create(
+                                        buyer,
+                                        new OrderRequests.Create(
+                                                request.requestKey(),
+                                                request.productId(),
+                                                request.items(),
+                                                request.addressId(),
+                                                UUID.randomUUID()),
+                                        "fixture-buyer-token"))
+                .isInstanceOf(OrderException.class);
+        var payment =
+                new OrderRequests.Payment(
+                        UUID.randomUUID(),
+                        "fixture-payment-key",
+                        true,
+                        "checkout-v1",
+                        new OrderRequests.Analytics(UUID.randomUUID(), "123.456", "123"));
+        commands.payment(buyer, held.orderId(), payment);
+        var command =
+                jdbc.queryForObject(
+                        "select payload from orders.outbox_events where"
+                                + " topic='stockdrop.payment.commands.private.v1' and"
+                                + " payload::jsonb->>'action'='APPROVE'",
+                        String.class);
+        assertThat(command).contains("analyticsId", "couponDiscount");
+        result(held.orderId(), PaymentReply.Status.APPROVED, clock.instant());
+        saga.advance(held.orderId());
+        var terminal =
+                jdbc.queryForObject(
+                        "select payload from orders.outbox_events where"
+                                + " topic='stockdrop.orders.lifecycle.v1' and"
+                                + " payload::jsonb->>'phase'='CONFIRMED'",
+                        String.class);
+        assertThat(terminal).contains("\"couponDiscount\":2900");
+    }
+
+    @Test
+    void couponRejectionOrFourUnknownRepliesContinueWithoutCoupon() {
+        for (String mode : List.of("REJECTED", "DOWN")) {
+            HTTP.couponMode = mode;
+            var original = request();
+            var response =
+                    commands.create(
+                            buyer,
+                            new OrderRequests.Create(
+                                    UUID.randomUUID(),
+                                    product,
+                                    original.items(),
+                                    address,
+                                    UUID.randomUUID()),
+                            "fixture-buyer-token");
+            for (int i = 0; i < 3 && response.state() == RESERVING; i++) {
+                clock.set(clock.instant().plusSeconds(61));
+                saga.advance(response.orderId());
+                response = queries.buyer(buyer, response.orderId());
+            }
+            assertThat(response.state()).isEqualTo(HELD);
+            assertThat(response.couponState())
+                    .isEqualTo(mode.equals("DOWN") ? "SKIPPED" : "REJECTED");
+            assertThat(response.couponDiscount()).isZero();
+            assertThat(response.totalAmount())
+                    .isEqualTo(response.itemsAmount() + response.effectiveShippingFee());
+        }
+    }
+
+    @Test
+    void memberPriceAndQualificationAreFixedOnFirstRequest() {
+
+        var request = request();
+        var member = new MembershipBenefit(true, clock.instant().plusSeconds(60), 7);
+        var first = commands.create(buyer, request, "fixture-buyer-token", member);
+        assertThat(first.shippingFee()).isEqualTo(3000L);
+        assertThat(first.originalShippingFee()).isEqualTo(3000L);
+        assertThat(first.membershipShippingDiscount()).isEqualTo(3000L);
+        assertThat(first.effectiveShippingFee()).isZero();
+        assertThat(first.totalAmount()).isEqualTo(first.unitPrice() * 3);
+
+        var replay = commands.create(buyer, request, "fixture-buyer-token");
+        assertThat(replay.totalAmount()).isEqualTo(first.totalAmount());
+        assertThat(orders.findById(first.orderId()).orElseThrow().membershipSourceVersion)
+                .isEqualTo(7L);
     }
 
     OrderRequests.Create request() {

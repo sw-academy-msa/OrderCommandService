@@ -15,7 +15,12 @@ public final class OrderRequests {
             @NotNull UUID requestKey,
             @NotNull UUID productId,
             @NotEmpty List<@NotNull @Valid Item> items,
-            @NotNull UUID addressId) {}
+            @NotNull UUID addressId,
+            UUID couponIssueId) {
+        public Create(UUID key, UUID product, List<Item> items, UUID address) {
+            this(key, product, items, address, null);
+        }
+    }
 
     public record Address(@NotNull UUID addressId, @PositiveOrZero long expectedVersion) {}
 
@@ -23,10 +28,26 @@ public final class OrderRequests {
             @NotNull UUID requestKey,
             @NotBlank @Size(max = 200) String paymentKey,
             @AssertTrue boolean agreed,
-            @NotBlank @Size(max = 100) String termsVersion) {
+            @NotBlank @Size(max = 100) String termsVersion,
+            @Valid Analytics analytics) {
+        public Payment(UUID key, String paymentKey, boolean agreed, String termsVersion) {
+            this(key, paymentKey, agreed, termsVersion, null);
+        }
+
         @Override
         public String toString() {
             return "Payment[REDACTED]";
+        }
+    }
+
+    /** 브라우저 분석 ID는 결제 서비스에서 동의와 연결 관계를 다시 검증합니다. */
+    public record Analytics(
+            @NotNull UUID analyticsId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[0-9]+\\.[0-9]+") String clientId,
+            @NotBlank @Size(max = 40) @Pattern(regexp = "[0-9]+") String sessionId) {
+        @Override
+        public String toString() {
+            return "Analytics[REDACTED]";
         }
     }
 

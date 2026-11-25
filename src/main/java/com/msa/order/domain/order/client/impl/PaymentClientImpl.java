@@ -3,6 +3,7 @@ package com.msa.order.domain.order.client.impl;
 import com.msa.order.domain.order.client.*;
 import com.msa.order.domain.order.client.dto.response.PaymentReply;
 import com.msa.order.domain.order.command.service.OrderJournal;
+import com.msa.order.domain.order.entity.OrderAnalyticsContext;
 import com.msa.order.domain.order.entity.PurchaseOrder;
 import com.msa.order.domain.order.repository.OrderRepository;
 import com.msa.order.domain.outbox.entity.OutboxEvent;
@@ -126,6 +127,26 @@ public class PaymentClientImpl implements PaymentClient {
         // 승인 명령 전용 비공개 토픽에만 포함합니다. Query 이벤트/응답/로그로는 전달하지 않습니다.
         if (paymentKey != null) {
             event.put("paymentKey", paymentKey);
+        }
+        if ("APPROVE".equals(action)) {
+            var context = em.find(OrderAnalyticsContext.class, o.id);
+            if (context != null) {
+                var analytics = new LinkedHashMap<String, Object>();
+                analytics.put("accountId", o.buyerId);
+                analytics.put("analyticsId", context.analyticsId);
+                analytics.put("clientId", context.clientId);
+                analytics.put("sessionId", context.sessionId);
+                analytics.put("productId", o.productId);
+                analytics.put("productName", o.productName);
+                analytics.put("quantity", o.items.stream().mapToInt(i -> i.quantity).sum());
+                analytics.put("unitPrice", o.unitPrice);
+                analytics.put("itemsAmount", o.itemsAmount);
+                analytics.put("couponDiscount", o.couponDiscount == null ? 0L : o.couponDiscount);
+                analytics.put(
+                        "couponName", o.couponIssueId == null ? null : o.couponIssueId.toString());
+                analytics.put("shipping", o.effectiveShippingFee());
+                event.put("analytics", analytics);
+            }
         }
         em.persist(
                 OutboxEvent.builder()

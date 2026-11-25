@@ -21,7 +21,10 @@ public record SagaTask(
         UUID paymentAttemptId,
         Long totalAmount,
         String paymentKey,
-        Instant approvedAt) {
+        Instant approvedAt,
+        UUID couponIssueId,
+        String couponState,
+        int couponLockAttempts) {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
     public static class SagaTaskBuilder {
         @Override

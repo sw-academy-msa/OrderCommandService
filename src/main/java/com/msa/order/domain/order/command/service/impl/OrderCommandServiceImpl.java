@@ -2,6 +2,7 @@ package com.msa.order.domain.order.command.service.impl;
 
 import com.msa.order.domain.order.client.AddressClient;
 import com.msa.order.domain.order.command.dto.request.OrderRequests;
+import com.msa.order.domain.order.command.dto.response.MembershipBenefit;
 import com.msa.order.domain.order.command.service.*;
 import com.msa.order.domain.order.exception.OrderErrorCode;
 import com.msa.order.domain.order.exception.OrderException;
@@ -35,6 +36,11 @@ public class OrderCommandServiceImpl implements OrderCommandService {
     }
 
     public CheckoutResponse create(UUID buyer, OrderRequests.Create r, String token) {
+        return create(buyer, r, token, MembershipBenefit.none());
+    }
+
+    public CheckoutResponse create(
+            UUID buyer, OrderRequests.Create r, String token, MembershipBenefit membership) {
         if (r.items() == null
                 || r.items().isEmpty()
                 || r.items().stream()
@@ -48,7 +54,7 @@ public class OrderCommandServiceImpl implements OrderCommandService {
         String hash = hash(r);
         UUID id = store.existing(buyer, r.requestKey(), hash);
         if (id == null) {
-            id = store.create(buyer, r, hash, addresses.get(r.addressId(), token));
+            id = store.create(buyer, r, hash, addresses.get(r.addressId(), token), membership);
         }
         saga.advance(id);
         return queries.buyer(buyer, id);
@@ -86,6 +92,7 @@ public class OrderCommandServiceImpl implements OrderCommandService {
                 r.productId()
                         + ":"
                         + r.addressId()
+                        + (r.couponIssueId() == null ? "" : ":" + r.couponIssueId())
                         + ":"
                         + r.items().stream()
                                 .sorted(Comparator.comparing(OrderRequests.Item::optionId))

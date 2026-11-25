@@ -72,6 +72,10 @@ server:
   shutdown: graceful
   forward-headers-strategy: none
 order:
+  coupon:
+    enabled: ${ORDER_COUPON_ENABLED:false}
+  lifecycle:
+    enabled: ${ORDER_LIFECYCLE_EVENTS_ENABLED:false}
   payment-events:
     enabled: ${ORDER_PAYMENT_EVENTS_ENABLED:false}
   service-auth:
@@ -103,6 +107,10 @@ order:
   clients:
     # 기본 https입니다. 평문 http는 로컬 프로필에서만 지정합니다.
     scheme: https
+    coupon:
+      enabled: ${ORDER_COUPON_ENABLED:false}
+      service-id: coupon-service
+      token: ${ORDER_COUPON_SERVICE_TOKEN:}
     product:
       enabled: ${ORDER_PRODUCT_ENABLED:false}
       service-id: product-command-service

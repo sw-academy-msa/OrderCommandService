@@ -23,7 +23,15 @@ public record CheckoutResponse(
         ShippingAddressResponse address,
         Long unitPrice,
         Long shippingFee,
+        Long originalShippingFee,
+        Long membershipShippingDiscount,
+        Long effectiveShippingFee,
         Long totalAmount,
+        Long itemsAmount,
+        UUID couponIssueId,
+        String couponState,
+        String couponRejectCode,
+        Long couponDiscount,
         Integer dispatchBusinessDays,
         Instant expiresAt,
         Instant serverTime,
@@ -118,6 +126,16 @@ public record CheckoutResponse(
                 .address(ShippingAddressResponse.from(o.address))
                 .unitPrice(o.unitPrice)
                 .shippingFee(o.shippingFee)
+                .originalShippingFee(
+                        o.originalShippingFee == null ? o.shippingFee : o.originalShippingFee)
+                .membershipShippingDiscount(
+                        o.membershipShippingDiscount == null ? 0L : o.membershipShippingDiscount)
+                .effectiveShippingFee(o.effectiveShippingFee())
+                .itemsAmount(o.itemsAmount)
+                .couponIssueId(o.couponIssueId)
+                .couponState(o.couponState)
+                .couponRejectCode(o.couponRejectCode)
+                .couponDiscount(o.couponDiscount)
                 .totalAmount(o.totalAmount)
                 .dispatchBusinessDays(o.dispatchBusinessDays)
                 .expiresAt(o.expiresAt)

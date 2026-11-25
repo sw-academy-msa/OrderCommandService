@@ -43,6 +43,9 @@ public class OutboxPublisherImpl implements OutboxPublisher {
             if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
             long delay = Math.min(60, 1L << Math.min(6, event.attempts));
             event.attempts++;
+            if ("stockdrop.orders.lifecycle.v1".equals(event.topic) && event.attempts >= 20) {
+                event.failedAt = clock.instant();
+            }
             event.nextAttemptAt = clock.instant().plusSeconds(delay);
             return true;
         }

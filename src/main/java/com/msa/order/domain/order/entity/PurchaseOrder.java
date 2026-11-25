@@ -94,7 +94,31 @@ public class PurchaseOrder {
     public Instant expiresAt;
     public Long unitPrice;
     public Long shippingFee;
+    public Long originalShippingFee;
+    public Long membershipShippingDiscount;
+    public Boolean membershipEligible;
+    public Long membershipSourceVersion;
+    public Instant membershipEvaluatedAt;
+    public Instant membershipEntitlementUntil;
+
+    @Column(length = 40)
+    public String shippingPolicyVersion;
+
+    public Integer membershipRateBps;
+    public Long membershipAmount;
     public Long totalAmount;
+    public Long itemsAmount;
+    public UUID couponIssueId;
+    public String couponState;
+    public String couponRejectCode;
+    public int couponLockAttempts;
+    public String couponDiscountType;
+    public Long couponAmount;
+    public Integer couponRateBps;
+    public Long couponMaxDiscount;
+    public Long couponMinItemsAmount;
+    public Long couponDefinitionVersion;
+    public Long couponDiscount;
 
     @Column(unique = true)
     public UUID paymentAttemptId;
@@ -130,6 +154,7 @@ public class PurchaseOrder {
 
     /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동). null이면 확정 전 */
     public Instant purchaseConfirmedAt;
+
     // 분산 작업 임대는 HTTP 동안 DB 잠금을 점유하지 않습니다. 재시작 후 만료된 임대를 다시 획득합니다.
     public UUID leaseToken;
     public Instant leaseUntil;
@@ -140,6 +165,25 @@ public class PurchaseOrder {
     public String lastFailureCode;
 
     protected PurchaseOrder() {}
+
+    /** 과거 주문의 null은 할인 없이 읽고 원 배송비를 보존합니다. */
+    public Long effectiveShippingFee() {
+        if (shippingFee == null) return null;
+        return Math.subtractExact(
+                originalShippingFee == null ? shippingFee : originalShippingFee,
+                membershipShippingDiscount == null ? 0 : membershipShippingDiscount);
+    }
+
+    /** 주문에 저장한 정책만 사용하고 비율 계산 중간값의 정수 범위 초과를 방지합니다. */
+    public long membershipDiscount(long original) {
+        if (!Boolean.TRUE.equals(membershipEligible)) return 0;
+        if (membershipRateBps == null)
+            return Math.min(original, membershipAmount == null ? 0 : membershipAmount);
+        return java.math.BigInteger.valueOf(original)
+                .multiply(java.math.BigInteger.valueOf(membershipRateBps))
+                .divide(java.math.BigInteger.valueOf(10000))
+                .longValueExact();
+    }
 
     // 기존 생성자를 거쳐 UUID·초기 상태·시간과 컬렉션 초기화를 보존하며 JPA 기본 생성자도 유지합니다.
     @Builder

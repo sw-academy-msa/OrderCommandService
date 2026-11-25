@@ -21,6 +21,7 @@ public class ServiceTokenProviderImpl implements ServiceTokenProvider {
     private final JwtDecoder decoder;
     private final Clock clock;
     private String cached;
+    private String cachedScope;
     private Instant expiresAt;
     private Instant refreshAt;
     private Instant retryAfter = Instant.MIN;
@@ -39,12 +40,19 @@ public class ServiceTokenProviderImpl implements ServiceTokenProvider {
     }
 
     public synchronized String token(String scope) {
-        if (!"product.stock".equals(scope)) {
+        if (!Set.of("product.stock", "coupon.lock").contains(scope)) {
             throw new RemoteFailure("SERVICE_SCOPE_NOT_ALLOWED", false);
         }
         // 기존 명시적 고정 토큰 설정/HTTP fixture와의 호환 경로입니다. 자동 모드에서는 fallback하지 않습니다.
         if (!properties.enabled()) {
-            return clients.product().token();
+            return "coupon.lock".equals(scope)
+                    ? clients.coupon().token()
+                    : clients.product().token();
+        }
+        if (!scope.equals(cachedScope)) {
+            cached = null;
+            retryAfter = Instant.MIN;
+            cachedScope = scope;
         }
         Instant now = clock.instant();
         if (valid(now) && now.isBefore(refreshAt)) {
