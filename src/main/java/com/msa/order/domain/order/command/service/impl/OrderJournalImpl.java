@@ -141,7 +141,8 @@ public class OrderJournalImpl implements OrderJournal {
                     OutboxEvent.builder()
                             .id(lifecycleId)
                             .topic("stockdrop.orders.lifecycle.v1")
-                            .aggregateId(o.id)
+                            // 구매자별 순서를 지키고 소비자가 key와 buyerId를 대조하도록 구매자로 파티션합니다.
+                            .aggregateId(o.buyerId)
                             .payload(json.writeValueAsString(lifecycle))
                             .now(clock.instant())
                             .build());
