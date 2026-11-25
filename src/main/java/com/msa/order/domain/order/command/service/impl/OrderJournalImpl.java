@@ -22,16 +22,20 @@ public class OrderJournalImpl implements OrderJournal {
     private final EntityManager em;
     private final JsonMapper json;
     private final Clock clock;
+    private final boolean lifecycleEnabled;
 
     public OrderJournalImpl(
             com.msa.order.domain.notification.service.BusinessNoticeService notices,
             EntityManager em,
             JsonMapper json,
-            Clock clock) {
+            Clock clock,
+            @org.springframework.beans.factory.annotation.Value("${order.lifecycle.enabled:false}")
+                    boolean lifecycleEnabled) {
         this.notices = notices;
         this.em = em;
         this.json = json;
         this.clock = clock;
+        this.lifecycleEnabled = lifecycleEnabled;
     }
 
     public void changed(PurchaseOrder o, String action, UUID actor) {
@@ -62,6 +66,12 @@ public class OrderJournalImpl implements OrderJournal {
             snapshot.put("originalShippingFee", o.originalShippingFee);
             snapshot.put("membershipShippingDiscount", o.membershipShippingDiscount);
             snapshot.put("effectiveShippingFee", o.effectiveShippingFee());
+        }
+        if (o.itemsAmount != null) {
+            snapshot.put("itemsAmount", o.itemsAmount);
+            snapshot.put("couponIssueId", o.couponIssueId);
+            snapshot.put("couponDiscount", o.couponDiscount);
+            snapshot.put("couponState", o.couponState);
         }
         snapshot.put("totalAmount", o.totalAmount);
         snapshot.put("dispatchBusinessDays", o.dispatchBusinessDays);
@@ -98,6 +108,44 @@ public class OrderJournalImpl implements OrderJournal {
                         .payload(json.writeValueAsString(event))
                         .now(clock.instant())
                         .build());
+        if (lifecycleEnabled
+                && Set.of("SAGA_HELD", "SAGA_CONFIRMED", "SAGA_FAILED", "SAGA_EXPIRED")
+                        .contains(action)) {
+            UUID lifecycleId =
+                    UUID.nameUUIDFromBytes(
+                            ("ORDER_LIFECYCLE:" + o.id + ":" + o.state)
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            var lifecycle = new LinkedHashMap<String, Object>();
+            lifecycle.put("eventId", lifecycleId);
+            lifecycle.put("schemaVersion", 1);
+            lifecycle.put("type", "ORDER_LIFECYCLE");
+            lifecycle.put("phase", o.state.name());
+            lifecycle.put("orderId", o.id);
+            lifecycle.put("aggregateVersion", o.projectionVersion);
+            lifecycle.put("buyerId", o.buyerId);
+            lifecycle.put("sellerId", o.sellerId);
+            lifecycle.put("productId", o.productId);
+            lifecycle.put("quantity", o.items.stream().mapToInt(i -> i.quantity).sum());
+            lifecycle.put("itemsAmount", o.itemsAmount == null ? 0L : o.itemsAmount);
+            lifecycle.put("couponIssueId", o.couponIssueId);
+            lifecycle.put("couponApplied", "LOCKED".equals(o.couponState));
+            lifecycle.put("couponDiscount", o.couponDiscount == null ? 0L : o.couponDiscount);
+            lifecycle.put(
+                    "membershipShippingDiscount",
+                    o.membershipShippingDiscount == null ? 0L : o.membershipShippingDiscount);
+            lifecycle.put("totalAmount", o.totalAmount == null ? 0L : o.totalAmount);
+            lifecycle.put("failureCode", o.lastFailureCode);
+            lifecycle.put("paymentStarted", o.paymentAttemptId != null);
+            lifecycle.put("occurredAt", clock.instant());
+            em.persist(
+                    OutboxEvent.builder()
+                            .id(lifecycleId)
+                            .topic("stockdrop.orders.lifecycle.v1")
+                            .aggregateId(o.id)
+                            .payload(json.writeValueAsString(lifecycle))
+                            .now(clock.instant())
+                            .build());
+        }
         // 알림은 원본 상태 전이가 확정되는 지점에서만 기록합니다. Saga 중간 단계와 재시도는 제외합니다.
         if ("SAGA_CONFIRMED".equals(action)) {
             notices.enqueue(

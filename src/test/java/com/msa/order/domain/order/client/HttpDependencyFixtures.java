@@ -17,6 +17,8 @@ public class HttpDependencyFixtures implements AutoCloseable {
     public final HttpServer server;
     public final UUID seller = UUID.randomUUID();
     public Clock clock = Clock.systemUTC();
+    public volatile String couponMode = "LOCKED";
+    public final AtomicInteger couponCalls = new AtomicInteger();
     public volatile boolean stockDenied;
     // 재고 거절 시 Product가 보낼 오류 코드입니다. 기본은 재고 부족입니다.
     public volatile String stockDeniedCode = "PRODUCT_STOCK";
@@ -56,6 +58,8 @@ public class HttpDependencyFixtures implements AutoCloseable {
         this.clock = clock;
         reservations.clear();
         payments.clear();
+        couponMode = "LOCKED";
+        couponCalls.set(0);
         stockDenied = false;
         stockDeniedCode = "PRODUCT_STOCK";
         reserveReplyLost = false;
@@ -108,6 +112,47 @@ public class HttpDependencyFixtures implements AutoCloseable {
                                 "요청이 성공했습니다.",
                                 "data",
                                 address));
+                return;
+            }
+            if (path.equals("/internal/v1/coupon-locks")) {
+                couponCalls.incrementAndGet();
+                var request = json.readTree(e.getRequestBody());
+                UUID order = UUID.fromString(request.path("orderId").asText());
+                if (!reservations.containsKey(order)) throw new IllegalStateException("재고 선확보 필요");
+                if ("DOWN".equals(couponMode)) {
+                    respond(e, 503, Map.of("code", "DOWN"));
+                    return;
+                }
+                if ("REJECTED".equals(couponMode)) {
+                    respond(e, 409, Map.of("code", "COUPON_EXPIRED"));
+                    return;
+                }
+                respond(
+                        e,
+                        200,
+                        Map.of(
+                                "success",
+                                true,
+                                "code",
+                                "COMMON_SUCCESS",
+                                "message",
+                                "성공",
+                                "data",
+                                Map.of(
+                                        "orderId",
+                                        order,
+                                        "couponIssueId",
+                                        request.path("couponIssueId").asText(),
+                                        "state",
+                                        "LOCKED",
+                                        "discountType",
+                                        "AMOUNT",
+                                        "amount",
+                                        3000L,
+                                        "minItemsAmount",
+                                        0L,
+                                        "definitionVersion",
+                                        1L)));
                 return;
             }
             if (path.startsWith("/internal/v1/stock-reservations")) {

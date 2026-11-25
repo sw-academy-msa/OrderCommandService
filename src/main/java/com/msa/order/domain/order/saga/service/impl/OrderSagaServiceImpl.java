@@ -19,13 +19,19 @@ public class OrderSagaServiceImpl implements OrderSagaService {
     private final ProductClient product;
     private final PaymentClient payment;
     private final Clock clock;
+    private final CouponClient coupons;
 
     public OrderSagaServiceImpl(
-            SagaStore store, ProductClient product, PaymentClient payment, Clock clock) {
+            SagaStore store,
+            ProductClient product,
+            PaymentClient payment,
+            Clock clock,
+            CouponClient coupons) {
         this.store = store;
         this.product = product;
         this.payment = payment;
         this.clock = clock;
+        this.coupons = coupons;
     }
 
     public void recover() {
@@ -98,6 +104,7 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                 yield SagaOutcome.builder()
                         .state(HELD)
                         .stock(r)
+                        .coupon(coupons.lock(t, r))
                         .payment(null)
                         .failure(null)
                         .build();

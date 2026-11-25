@@ -121,7 +121,8 @@ public class HttpTransport {
                                     (req, response) -> {
                                         String code = "UPSTREAM_UNAVAILABLE";
                                         boolean definitive = false;
-                                        if (response.getStatusCode().value() == 400
+                                        if (response.getStatusCode().value() == 403
+                                                || response.getStatusCode().value() == 400
                                                 || response.getStatusCode().value() == 404
                                                 || response.getStatusCode().value() == 409) {
                                             try {
@@ -131,10 +132,18 @@ public class HttpTransport {
                                                 Object candidate = error.get("code");
                                                 if (candidate instanceof String value
                                                         && java.util.Set.of(
+                                                                        "COUPON_NOT_OWNED",
+                                                                        "COUPON_NOT_FOUND",
+                                                                        "COUPON_NOT_AVAILABLE",
+                                                                        "COUPON_EXPIRED",
+                                                                        "COUPON_SCOPE_MISMATCH",
+                                                                        "COUPON_MIN_AMOUNT",
+                                                                        "COUPON_SELF_PRODUCT",
                                                                         "PRODUCT_STOCK",
                                                                         "PRODUCT_STATE",
                                                                         "PRODUCT_DUPLICATE",
-                                                                        // 판매자 본인 상품 확보 거절입니다. 재시도해도 결과가 같아 확정 실패로 둡니다.
+                                                                        // 판매자 본인 상품 확보 거절입니다. 재시도해도
+                                                                        // 결과가 같아 확정 실패로 둡니다.
                                                                         "PRODUCT_SELF_PURCHASE",
                                                                         "PRODUCT_EXPIRED",
                                                                         "PRODUCT_NOT_FOUND",
