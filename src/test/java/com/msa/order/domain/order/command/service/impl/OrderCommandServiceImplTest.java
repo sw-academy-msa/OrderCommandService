@@ -450,6 +450,7 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         saga.recover();
         assertThat(HTTP.reserveCalls.get()).isEqualTo(1);
         assertThat(HTTP.approveCalls.get()).isZero();
+        assertThat(commandCount("APPROVE")).isZero();
     }
 
     @Test
