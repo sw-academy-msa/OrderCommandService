@@ -13,6 +13,11 @@ import java.util.*;
 
 /** 주문별 단기 쓰기 잠금으로 API·Saga 상태 전이를 직렬화합니다. */
 public interface OrderRepository extends JpaRepository<PurchaseOrder, UUID> {
+    /** 한 SQL snapshot으로 상태별 건수와 시작 시각을 읽으며 복제본끼리는 max로 집계합니다. */
+    @Transactional(readOnly = true, timeout = 5)
+    @Query(value = "select state as state, count(*) as orders, min(created_at) as oldest from orders.purchase_orders group by state", nativeQuery = true)
+    List<com.msa.order.domain.order.saga.dto.response.SagaMetricsSnapshot> monitoringSagaSnapshot();
+
     Optional<PurchaseOrder> findByBuyerIdAndRequestKey(UUID buyerId, UUID requestKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

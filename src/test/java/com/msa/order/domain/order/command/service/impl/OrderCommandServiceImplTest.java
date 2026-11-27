@@ -49,7 +49,9 @@ import java.util.concurrent.*;
             "membership.shipping.enabled=true",
             "order.coupon.enabled=true",
             "order.lifecycle.enabled=true",
-            "ORDER_ANALYTICS_ENABLED=true"
+            "ORDER_ANALYTICS_ENABLED=true",
+            "monitoring.saga-enabled=true",
+            "monitoring.saga-poll-ms=3600000"
         })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
@@ -90,6 +92,40 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     @Autowired MockMvc mvc;
     @Autowired JsonMapper json;
     @Autowired com.msa.order.domain.payment.service.PaymentResultService paymentResults;
+    @Autowired io.micrometer.core.instrument.MeterRegistry meterRegistry;
+    @Autowired com.msa.order.global.config.monitoring.SagaMetricsConfig sagaMetrics;
+
+    /** 실제 DB 롤백과 오래된 임대 결과 재전달이 성공 카운터를 부풀리지 않는지 확인합니다. */
+    @Test
+    void sagaMetricsOnlyCountCommittedChangesOnceAndSnapshotUsesDatabase() {
+        var order = new PurchaseOrder(UUID.randomUUID(), UUID.randomUUID(), "metrics", UUID.randomUUID(), clock.instant().minusSeconds(90));
+        order.state = RELEASING_STOCK;
+        order.reservationId = UUID.randomUUID();
+        order.totalAmount = 100L;
+        order.expiresAt = clock.instant().plusSeconds(10);
+        order.nextAttemptAt = clock.instant();
+        tx.executeWithoutResult(status -> orders.saveAndFlush(order));
+        var task = sagaStore.claim(order.id);
+        var transition = meterRegistry.get("stockdrop.saga.transitions").tags("from", "RELEASING_STOCK", "to", "FAILED").counter();
+        var compensation = meterRegistry.get("stockdrop.saga.compensations").tag("step", "STOCK_RELEASE").counter();
+        double before = transition.count(), beforeCompensation = compensation.count();
+        tx.executeWithoutResult(status -> {
+            sagaStore.complete(task, new SagaOutcome(FAILED, null, null, "TEST"));
+            assertThat(transition.count()).isEqualTo(before);
+            status.setRollbackOnly();
+        });
+        assertThat(transition.count()).isEqualTo(before);
+        assertThat(compensation.count()).isEqualTo(beforeCompensation);
+        sagaMetrics.sample();
+        assertThat(meterRegistry.get("stockdrop.saga.orders").tag("state", "RELEASING_STOCK").gauge().value()).isEqualTo(1);
+        assertThat(meterRegistry.get("stockdrop.saga.oldest.in.progress.seconds").gauge().value()).isEqualTo(90);
+        sagaStore.complete(task, new SagaOutcome(FAILED, null, null, "TEST"));
+        sagaStore.complete(task, new SagaOutcome(FAILED, null, null, "TEST"));
+        assertThat(transition.count()).isEqualTo(before + 1);
+        assertThat(compensation.count()).isEqualTo(beforeCompensation + 1);
+        sagaMetrics.sample();
+        assertThat(meterRegistry.get("stockdrop.saga.in.progress").gauge().value()).isZero();
+    }
     UUID buyer;
     UUID product;
     UUID option;

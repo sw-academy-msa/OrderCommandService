@@ -31,6 +31,7 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
     private final MembershipShippingProperties membershipShipping;
     private final OrderAnalyticsContextRepository analytics;
     private final boolean analyticsEnabled;
+    private final com.msa.order.global.config.monitoring.SagaMetricsConfig metrics;
 
     public OrderWriteStoreImpl(
             com.msa.order.domain.withdrawal.service.WithdrawalGateService withdrawal,
@@ -40,7 +41,9 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
             com.msa.order.domain.terms.query.service.CheckoutTermsService terms,
             MembershipShippingProperties membershipShipping,
             OrderAnalyticsContextRepository analytics,
-            @Value("${ORDER_ANALYTICS_ENABLED:false}") boolean analyticsEnabled) {
+            @Value("${ORDER_ANALYTICS_ENABLED:false}") boolean analyticsEnabled,
+            com.msa.order.global.config.monitoring.SagaMetricsConfig metrics) {
+        this.metrics = metrics;
         this.analytics = analytics;
         this.analyticsEnabled = analyticsEnabled;
         this.membershipShipping = membershipShipping;
@@ -165,6 +168,8 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         o.state = STARTING_PAYMENT;
         o.nextAttemptAt = clock.instant();
         journal.changed(o, "PAYMENT_REQUESTED", buyer);
+        // 중복 결제 요청은 위에서 반환되므로 전이를 다시 계수하지 않습니다.
+        metrics.transition(HELD, STARTING_PAYMENT);
     }
 
     public void shipment(UUID seller, UUID id, OrderRequests.Shipment r) {
