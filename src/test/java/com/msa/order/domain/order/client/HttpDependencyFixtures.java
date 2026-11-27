@@ -181,7 +181,9 @@ public class HttpDependencyFixtures implements AutoCloseable {
         if (path.equals(base)) {
             reserveCalls.incrementAndGet();
             if (stockDenied) {
-                respond(e, 409, Map.of("code", stockDeniedCode));
+                respond(e, 409, "PRODUCT_PURCHASE_LIMIT_EXCEEDED".equals(stockDeniedCode)
+                        ? Map.of("code", stockDeniedCode, "purchaseLimit", 3, "remainingPurchaseQuantity", 1)
+                        : Map.of("code", stockDeniedCode));
                 return;
             }
             UUID order = UUID.fromString(body.path("orderId").asText());

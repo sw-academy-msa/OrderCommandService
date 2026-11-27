@@ -59,6 +59,8 @@ public class OrderSagaServiceImpl implements OrderSagaService {
                             task,
                             SagaOutcome.builder()
                                     .state(FAILED)
+                                    .purchaseLimit(failure.purchaseLimit)
+                                    .remainingPurchaseQuantity(failure.remainingPurchaseQuantity)
                                     .stock(null)
                                     .payment(null)
                                     .failure(failure.code())

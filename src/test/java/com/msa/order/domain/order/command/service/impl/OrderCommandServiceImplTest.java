@@ -436,6 +436,24 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
     }
 
     @Test
+    void purchaseLimitRejectionPersistsDetailsForCheckoutPolling() {
+        // 업무 거절은 재시도나 결제 없이 끝내며 폴링에도 원인을 유지합니다.
+        HTTP.stockDenied = true;
+        HTTP.stockDeniedCode = "PRODUCT_PURCHASE_LIMIT_EXCEEDED";
+        var created = create();
+        assertThat(created.state()).isEqualTo(FAILED);
+        var checkout = queries.buyer(buyer, created.orderId());
+        assertThat(checkout.failureCode()).isEqualTo("PRODUCT_PURCHASE_LIMIT_EXCEEDED");
+        assertThat(checkout.purchaseLimit()).isEqualTo(3);
+        assertThat(checkout.remainingPurchaseQuantity()).isEqualTo(1);
+        clock.set(clock.instant().plusSeconds(65));
+        saga.recover();
+        assertThat(HTTP.reserveCalls.get()).isEqualTo(1);
+        assertThat(HTTP.approveCalls.get()).isZero();
+        assertThat(commandCount("APPROVE")).isZero();
+    }
+
+    @Test
     void sellerOwnProductRejectionFailsWithoutRetry() {
         HTTP.stockDenied = true;
         HTTP.stockDeniedCode = "PRODUCT_SELF_PURCHASE";
