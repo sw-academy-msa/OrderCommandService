@@ -165,3 +165,5 @@ monitoring:
 
   # Outbox 집계 스케줄은 명시 활성화하며 테스트/미설정 환경에서 DB를 주기 조회하지 않습니다.
   outbox-enabled: ${MONITORING_OUTBOX_ENABLED:false}
+  # 기존 Outbox와 동일하게 명시 활성화하며 DB 집계는 30초 캐시합니다.
+  saga-enabled: ${MONITORING_SAGA_ENABLED:false}

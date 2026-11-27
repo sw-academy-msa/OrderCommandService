@@ -22,8 +22,11 @@ public class SagaStoreImpl implements SagaStore {
     private final OrderRepository orders;
     private final OrderJournal journal;
     private final Clock clock;
+    private final com.msa.order.global.config.monitoring.SagaMetricsConfig metrics;
 
-    public SagaStoreImpl(OrderRepository orders, OrderJournal journal, Clock clock) {
+    public SagaStoreImpl(OrderRepository orders, OrderJournal journal, Clock clock,
+            com.msa.order.global.config.monitoring.SagaMetricsConfig metrics) {
+        this.metrics = metrics;
         this.orders = orders;
         this.journal = journal;
         this.clock = clock;
@@ -73,6 +76,7 @@ public class SagaStoreImpl implements SagaStore {
         if (!Objects.equals(o.leaseToken, task.leaseToken()) || o.state != task.state()) {
             return;
         }
+        var before = o.state;
         var r = outcome.stock();
         if (r != null && o.reservationId == null) {
             o.reservationId = r.id();
@@ -130,6 +134,9 @@ public class SagaStoreImpl implements SagaStore {
         o.leaseUntil = null;
         o.nextAttemptAt = o.terminal() ? null : o.state == HELD ? o.expiresAt : clock.instant();
         journal.changed(o, "SAGA_" + o.state, null);
+        // 임대 검증을 통과한 실제 변경만 커밋 이후 기록합니다.
+        metrics.transition(before, o.state);
+        metrics.compensation(before, o.state);
     }
 
     public void retry(SagaTask task, String failure) {
@@ -137,6 +144,7 @@ public class SagaStoreImpl implements SagaStore {
         if (!Objects.equals(o.leaseToken, task.leaseToken()) || o.state != task.state()) {
             return;
         }
+        var before = o.state;
         // 결과 미도착 시 승인 명령을 중복 생성하지 않고 로컬 결과와 Kafka CHECK로 복구합니다.
         if (o.state == APPROVING_PAYMENT) {
             o.state = VERIFYING_PAYMENT;
@@ -149,5 +157,6 @@ public class SagaStoreImpl implements SagaStore {
         o.leaseUntil = null;
         o.nextAttemptAt = clock.instant().plusSeconds(Math.min(60, 1L << Math.min(6, o.attempts)));
         journal.changed(o, "RETRY_" + failure, null);
+        metrics.transition(before, o.state);
     }
 }
