@@ -164,6 +164,10 @@ public class PurchaseOrder {
     @Column(length = 100)
     public String lastFailureCode;
 
+    // 구매 한도 계산 결과를 보존하여 재고 부족과 구분합니다.
+    public Integer purchaseLimit;
+    public Integer remainingPurchaseQuantity;
+
     protected PurchaseOrder() {}
 
     /** 과거 주문의 null은 할인 없이 읽고 원 배송비를 보존합니다. */

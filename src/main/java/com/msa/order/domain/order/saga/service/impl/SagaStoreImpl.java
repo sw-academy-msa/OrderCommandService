@@ -119,6 +119,9 @@ public class SagaStoreImpl implements SagaStore {
         }
         o.state = outcome.state();
         o.lastFailureCode = outcome.failure();
+        // 구매 한도 계산 결과를 보존하여 재고 부족과 구분합니다.
+        o.purchaseLimit = outcome.purchaseLimit();
+        o.remainingPurchaseQuantity = outcome.remainingPurchaseQuantity();
         if (o.reservationId != null && o.totalAmount == null) {
             o.state = RELEASING_STOCK;
             o.lastFailureCode = "AMOUNT_OVERFLOW";

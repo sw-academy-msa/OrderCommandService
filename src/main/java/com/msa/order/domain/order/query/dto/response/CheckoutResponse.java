@@ -41,6 +41,8 @@ public record CheckoutResponse(
         String trackingNumber,
         Instant purchaseConfirmedAt,
         String failureCode,
+        Integer purchaseLimit,
+        Integer remainingPurchaseQuantity,
         String termsVersion) {
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */
     public static class CheckoutResponseBuilder {
@@ -147,6 +149,8 @@ public record CheckoutResponse(
                 .purchaseConfirmedAt(o.purchaseConfirmedAt)
                 .termsVersion(o.termsVersion == null ? currentTermsVersion : o.termsVersion)
                 .failureCode(o.lastFailureCode)
+                .purchaseLimit(o.purchaseLimit)
+                .remainingPurchaseQuantity(o.remainingPurchaseQuantity)
                 .build();
     }
 

@@ -13,10 +13,10 @@ public record SagaOutcome(
         StockReply stock,
         PaymentReply payment,
         String failure,
-        CouponReply coupon) {
+        CouponReply coupon, Integer purchaseLimit, Integer remainingPurchaseQuantity) {
     public SagaOutcome(
             PurchaseOrder.State state, StockReply stock, PaymentReply payment, String failure) {
-        this(state, stock, payment, failure, null);
+        this(state, stock, payment, failure, null, null, null);
     }
 
     /** 빌더에 담긴 개인정보·결제키·토큰·이벤트 본문을 로그에 노출하지 않습니다. */

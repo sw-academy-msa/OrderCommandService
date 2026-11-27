@@ -121,6 +121,7 @@ public class HttpTransport {
                                     (req, response) -> {
                                         String code = "UPSTREAM_UNAVAILABLE";
                                         boolean definitive = false;
+                                        Integer limit = null, remaining = null;
                                         if (response.getStatusCode().value() == 403
                                                 || response.getStatusCode().value() == 400
                                                 || response.getStatusCode().value() == 404
@@ -140,6 +141,7 @@ public class HttpTransport {
                                                                         "COUPON_MIN_AMOUNT",
                                                                         "COUPON_SELF_PRODUCT",
                                                                         "PRODUCT_STOCK",
+                                                                        "PRODUCT_PURCHASE_LIMIT_EXCEEDED",
                                                                         "PRODUCT_STATE",
                                                                         "PRODUCT_DUPLICATE",
                                                                         // 판매자 본인 상품 확보 거절입니다. 재시도해도
@@ -149,6 +151,14 @@ public class HttpTransport {
                                                                         "PRODUCT_NOT_FOUND",
                                                                         "PRODUCT_INVALID")
                                                                 .contains(value)) {
+                                                    // 구매 한도 계산 결과를 보존하여 재고 부족과 구분합니다.
+                                                    if ("PRODUCT_PURCHASE_LIMIT_EXCEEDED".equals(value)
+                                                            && error.get("purchaseLimit") instanceof Integer n && n > 0
+                                                            && error.get("remainingPurchaseQuantity") instanceof Integer m
+                                                            && m >= 0 && m <= n) {
+                                                        limit = n;
+                                                        remaining = m;
+                                                    }
                                                     code = value;
                                                     definitive = true;
                                                 }
@@ -156,7 +166,7 @@ public class HttpTransport {
                                                 // 알 수 없는 오류나 HTML은 실패 확정의 근거가 아닙니다.
                                             }
                                         }
-                                        throw new RemoteFailure(code, definitive);
+                                        throw new RemoteFailure(code, definitive, limit, remaining);
                                     })
                             .body(type);
             if (result == null) {
