@@ -44,6 +44,7 @@ orders.outbox_events는 변경과 같은 로컬 트랜잭션입니다. ORDER_OUT
 - stockdrop.orders.inquiries.private.v1: key=orderId, ORDER_INQUIRY_UPSERT, inquiry 스냅샷.
 - envelope: eventId/schemaVersion=1/type/aggregateId/aggregateVersion/occurredAt와 스냅샷.
 - 주문 버전은 projectionVersion, 문의 버전은 메시지 수입니다. 주문 잠금으로 변경을 직렬화합니다.
+- 주문 버전은 생성(ORDER_CREATED) 1부터 발행마다 1씩 증가하며 같은 주문에서 같은 버전을 다시 쓰지 않습니다.
 - 배송지·구매자 ID·문의·사진 키는 비공개 토픽 ACL/보존 정책이 필요합니다. 결제키/토큰/작업 임대는 발행하지 않습니다.
 - Order Query/Consumer는 아직 없습니다. 향후 RDS orders_query와 멱등 이력·버전 비교가 필요합니다. 발행 완료는 조회 반영 완료가 아니며 Kafka 유실 백업도 아닙니다.
 

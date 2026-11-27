@@ -113,9 +113,11 @@ public class OrderWriteStoreImpl implements OrderWriteStore {
         o.membershipRateBps =
                 "RATE".equals(membershipShipping.mode()) ? membershipShipping.rateBps() : null;
         o.membershipAmount = membershipShipping.amount();
-        orders.saveAndFlush(o);
-        journal.changed(o, "ORDER_CREATED", buyer);
-        return o.id;
+        // UUID를 직접 할당하고 @Version이 원시형이라 Spring Data는 새 주문도 merge로 저장합니다.
+        // merge는 별도 관리 엔티티를 돌려주므로 반환값에 조회 버전을 올려야 DB에 1이 남고 첫 Saga 전이가 2로 발행됩니다.
+        var saved = orders.saveAndFlush(o);
+        journal.changed(saved, "ORDER_CREATED", buyer);
+        return saved.id;
     }
 
     public void address(UUID buyer, UUID id, OrderRequests.Address r, ShippingAddress address) {
