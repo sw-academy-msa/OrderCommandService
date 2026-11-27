@@ -31,7 +31,7 @@ class SagaMetricsTest {
         metrics.sample();
         assertThat(registry.get("stockdrop.saga.collector.available").gauge().value()).isZero();
         assertThat(registry.get("stockdrop.saga.in.progress").gauge().value()).isNaN();
-        when(orders.monitoringSagaSnapshot()).thenReturn(List.of());
+        doReturn(List.of()).when(orders).monitoringSagaSnapshot();
         metrics.sample();
         assertThat(registry.get("stockdrop.saga.in.progress").gauge().value()).isZero();
         assertThat(registry.get("stockdrop.saga.oldest.in.progress.seconds").gauge().value()).isZero();
