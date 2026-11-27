@@ -426,6 +426,67 @@ class OrderCommandServiceImplTest extends OrderDatabaseTestSupport {
         assertThat(restored.expiresAt()).isEqualTo(Instant.parse("2030-01-01T00:05:00Z"));
     }
 
+    /** 주문 생성과 첫 Saga 전이가 같은 조회 버전으로 발행되지 않는지 실제 Outbox 행으로 확인합니다. */
+    @Test
+    void createThenHeldPublishesStrictlyIncreasingProjectionVersions() {
+        var o = create();
+        assertThat(o.state()).isEqualTo(HELD);
+        assertThat(privateVersions(o.orderId()))
+                .containsExactly(Map.entry(1L, "RESERVING"), Map.entry(2L, "HELD"));
+        assertThat(orders.findById(o.orderId()).orElseThrow().projectionVersion).isEqualTo(2);
+    }
+
+    @Test
+    void createThenFailedPublishesStrictlyIncreasingProjectionVersions() {
+        HTTP.stockDenied = true;
+        var o = create();
+        assertThat(o.state()).isEqualTo(FAILED);
+        assertThat(privateVersions(o.orderId()))
+                .containsExactly(Map.entry(1L, "RESERVING"), Map.entry(2L, "FAILED"));
+    }
+
+    @Test
+    void createThenRetryAndRecoveryKeepProjectionVersionsStrictlyIncreasing() {
+        HTTP.reserveReplyLost = true;
+        var o = create();
+        assertThat(o.state()).isEqualTo(RESERVING);
+        clock.set(clock.instant().plusSeconds(65));
+        saga.recover();
+        assertThat(queries.buyer(buyer, o.orderId()).state()).isEqualTo(HELD);
+        assertThat(privateVersions(o.orderId()))
+                .containsExactly(
+                        Map.entry(1L, "RESERVING"),
+                        Map.entry(2L, "RESERVING"),
+                        Map.entry(3L, "HELD"));
+    }
+
+    /** 결제 결과 반영처럼 한 요청이 여러 전이를 기록해도 버전은 빠짐없이 1씩 증가합니다. */
+    @Test
+    void paidOrderPublishesGaplessStrictlyIncreasingProjectionVersions() {
+        var o = paid();
+        saga.advance(o.orderId());
+        var versions = privateVersions(o.orderId());
+        assertThat(versions.getLast().getValue()).isEqualTo("CONFIRMED");
+        assertThat(versions.stream().map(Map.Entry::getKey).toList())
+                .isEqualTo(
+                        java.util.stream.LongStream.rangeClosed(1, versions.size())
+                                .boxed()
+                                .toList());
+        assertThat(orders.findById(o.orderId()).orElseThrow().projectionVersion)
+                .isEqualTo(versions.size());
+    }
+
+    /** 조회 이벤트의 aggregateVersion과 상태를 버전 순으로 읽습니다. 같은 버전이 두 번 나오면 실패합니다. */
+    List<Map.Entry<Long, String>> privateVersions(UUID orderId) {
+        return jdbc.query(
+                "select (payload::jsonb->>'aggregateVersion')::bigint as v,"
+                        + " payload::jsonb->'order'->>'state' as s from orders.outbox_events"
+                        + " where topic='stockdrop.orders.private.v1' and partition_key=?"
+                        + " order by v",
+                (rs, i) -> Map.entry(rs.getLong("v"), rs.getString("s")),
+                orderId.toString());
+    }
+
     @Test
     void stockRejectionNeverCallsPayment() {
         HTTP.stockDenied = true;
